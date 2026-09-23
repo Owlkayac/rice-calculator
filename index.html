@@ -66,6 +66,14 @@ button {
   text-align: center;
 }
 
+.result-line {
+  margin: 8px 0;
+}
+
+.total-label {
+  margin-top: 18px;
+}
+
 .total {
   font-size: 32px;
   font-weight: bold;
@@ -80,21 +88,27 @@ button {
 <h1>発送請求額計算</h1>
 
 <div class="item">
-<label>商品A　1,850円/kg（税抜き）</label>
+<label>商品A　1,850円/kg（税抜・消費税8%）</label>
 <input id="a" type="number" min="0" step="0.01" placeholder="0">
 kg
 </div>
 
 <div class="item">
-<label>商品B　1,450円/kg（税抜き）</label>
+<label>商品B　1,450円/kg（税抜・消費税8%）</label>
 <input id="b" type="number" min="0" step="0.01" placeholder="0">
 kg
 </div>
 
 <div class="item">
-<label>商品C　863円/kg（税抜き）</label>
+<label>商品C　863円/kg（税抜・消費税8%）</label>
 <input id="c" type="number" min="0" step="0.01" placeholder="0">
 kg
+</div>
+
+<div class="item">
+<label for="shipping">送料（税抜）</label>
+<input id="shipping" type="number" min="0" step="1" placeholder="0">
+円
 </div>
 
 <button onclick="calculate()">計算する</button>
@@ -102,7 +116,11 @@ kg
 <button class="clear" onclick="clearAll()">クリア</button>
 
 <div class="result">
-<div>請求額（税抜き）</div>
+<div class="result-line">商品代（税込・8%）</div>
+<div id="productTotal">0円</div>
+<div class="result-line">送料（税込・10%）</div>
+<div id="shippingTotal">0円</div>
+<div class="result-line total-label">請求額（税込）</div>
 <div class="total" id="total">0円</div>
 </div>
 
@@ -110,19 +128,28 @@ kg
 
 <script>
 
+function formatYen(amount) {
+  return Math.round(amount).toLocaleString() + "円";
+}
+
 function calculate() {
 
   const a = Number(document.getElementById("a").value) || 0;
   const b = Number(document.getElementById("b").value) || 0;
   const c = Number(document.getElementById("c").value) || 0;
+  const shipping = Number(document.getElementById("shipping").value) || 0;
 
-  const total =
+  const productTotal = (
     a * 1850 +
     b * 1450 +
-    c * 863;
+    c * 863
+  ) * 1.08;
+  const shippingTotal = shipping * 1.10;
+  const total = productTotal + shippingTotal;
 
-  document.getElementById("total").textContent =
-    Math.round(total).toLocaleString() + "円";
+  document.getElementById("productTotal").textContent = formatYen(productTotal);
+  document.getElementById("shippingTotal").textContent = formatYen(shippingTotal);
+  document.getElementById("total").textContent = formatYen(total);
 }
 
 function clearAll() {
@@ -130,7 +157,10 @@ function clearAll() {
   document.getElementById("a").value = "";
   document.getElementById("b").value = "";
   document.getElementById("c").value = "";
+  document.getElementById("shipping").value = "";
 
+  document.getElementById("productTotal").textContent = "0円";
+  document.getElementById("shippingTotal").textContent = "0円";
   document.getElementById("total").textContent = "0円";
 }
 
