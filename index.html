@@ -80,19 +80,19 @@ button {
 <h1>発送請求額計算</h1>
 
 <div class="item">
-<label>商品A　1,998円/kg（税込）</label>
+<label>商品A　1,850円/kg（税抜き）</label>
 <input id="a" type="number" min="0" step="0.01" placeholder="0">
 kg
 </div>
 
 <div class="item">
-<label>商品B　1,566円/kg（税込）</label>
+<label>商品B　1,450円/kg（税抜き）</label>
 <input id="b" type="number" min="0" step="0.01" placeholder="0">
 kg
 </div>
 
 <div class="item">
-<label>商品C　932.04円/kg（税込）</label>
+<label>商品C　863円/kg（税抜き）</label>
 <input id="c" type="number" min="0" step="0.01" placeholder="0">
 kg
 </div>
@@ -102,7 +102,7 @@ kg
 <button class="clear" onclick="clearAll()">クリア</button>
 
 <div class="result">
-<div>請求額（税込）</div>
+<div>請求額（税抜き）</div>
 <div class="total" id="total">0円</div>
 </div>
 
@@ -117,9 +117,9 @@ function calculate() {
   const c = Number(document.getElementById("c").value) || 0;
 
   const total =
-    a * 1998 +
-    b * 1566 +
-    c * 932.04;
+    a * 1850 +
+    b * 1450 +
+    c * 863;
 
   document.getElementById("total").textContent =
     Math.round(total).toLocaleString() + "円";
