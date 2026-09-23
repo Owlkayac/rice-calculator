@@ -49,8 +49,16 @@ button { width: 100%; padding: 16px; font-size: 18px; margin-top: 15px; border: 
 <input id="c" type="number" min="0" step="0.01" placeholder="0"> kg
 </div>
 <div class="item">
+<label>商品D　797円/kg（税抜・消費税8%）</label>
+<input id="d" type="number" min="0" step="0.01" placeholder="0"> kg
+</div>
+<div class="item">
+<label>書籍　1,600円（税抜・消費税10%）</label>
+<div>1冊</div>
+</div>
+<div class="item">
 <label for="weight">合計重量</label>
-<input id="weight" type="number" placeholder="商品重量から自動計算" readonly> kg
+<input id="weight" type="number" placeholder="商品重��から自動計算" readonly> kg
 </div>
 <div class="item">
 <label for="shipping">送料（税込）</label>
@@ -59,8 +67,9 @@ button { width: 100%; padding: 16px; font-size: 18px; margin-top: 15px; border: 
 <button onclick="calculate()">計算する</button>
 <button class="clear" onclick="clearAll()">クリア</button>
 <div class="result">
-<div class="result-line">商品代（税込・8%）</div><div id="productTotal">0円</div>
-<div class="result-line">送料（税込）</div><div id="shippingTotal">0円</div>
+<div class="result-line">商品A〜D代（税込・8%）</div><div id="productTotal">0円</div>
+<div class="result-line">書籍（税込・10%）</div><div id="bookTotal">0円</div>
+<div class="result-line">送料（税込・10%）</div><div id="shippingTotal">0円</div>
 <div class="result-line total-label">請求額（税込）</div><div class="total" id="total">0円</div>
 </div>
 </div>
@@ -113,21 +122,29 @@ function calculate() {
     const a = Number(document.getElementById("a").value) || 0;
     const b = Number(document.getElementById("b").value) || 0;
     const c = Number(document.getElementById("c").value) || 0;
-    const weight = a + b + c;
+    const d = Number(document.getElementById("d").value) || 0;
+    const weight = a + b + c + d;
     const shipping = calcShippingFee(destPrefecture, weight);
     document.getElementById("weight").value = weight;
     document.getElementById("shipping").value = shipping;
-    const productTotal = calculateTaxIncluded(a * 1850, 1.08) + calculateTaxIncluded(b * 1450, 1.08) + calculateTaxIncluded(c * 863, 1.08);
-    const total = productTotal + shipping;
+
+    // 商品ごとに税抜単価×重量を計算し、商品ごとに税込金額を切り捨てる。
+    const productTotal = calculateTaxIncluded(a * 1850, 1.08)
+      + calculateTaxIncluded(b * 1450, 1.08)
+      + calculateTaxIncluded(c * 863, 1.08)
+      + calculateTaxIncluded(d * 797, 1.08);
+    const bookTotal = calculateTaxIncluded(1600, 1.10);
+    const total = productTotal + bookTotal + shipping;
     document.getElementById("productTotal").textContent = formatYen(productTotal);
+    document.getElementById("bookTotal").textContent = formatYen(bookTotal);
     document.getElementById("shippingTotal").textContent = formatYen(shipping);
     document.getElementById("total").textContent = formatYen(total);
   } catch (error) { alert(error.message); }
 }
 
 function clearAll() {
-  ["destPrefecture", "a", "b", "c", "weight", "shipping"].forEach(id => { document.getElementById(id).value = ""; });
-  ["productTotal", "shippingTotal", "total"].forEach(id => { document.getElementById(id).textContent = "0円"; });
+  ["destPrefecture", "a", "b", "c", "d", "weight", "shipping"].forEach(id => { document.getElementById(id).value = ""; });
+  ["productTotal", "bookTotal", "shippingTotal", "total"].forEach(id => { document.getElementById(id).textContent = "0円"; });
 }
 </script>
 </body>
