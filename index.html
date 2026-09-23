@@ -30,7 +30,7 @@ button { width: 100%; padding: 16px; font-size: 18px; margin-top: 15px; border: 
   <option>北海道</option>
   <option>青森県</option><option>岩手県</option><option>宮城県</option><option>秋田県</option><option>山形県</option><option>福島県</option>
   <option>茨城県</option><option>栃木県</option><option>群馬県</option><option>埼玉県</option><option>千葉県</option><option>東京都</option><option>神奈川県</option>
-  <option>新潟県</option><option>富山県</option><option>石川県</option><option>福井県</option><option>山梨県</option><option>長野県</option><option>岐阜県</option><option>静岡県</option><option>愛知県</option>
+  <option>新潟県</option><option>富山県</option><option>石川県</option><option>福井県</option><option>山梨県</option><option>長野県</option><option>岐阜県</option><option>静岡県</option><option>愛知県</option><option>三重県</option>
   <option>滋賀県</option><option>京都府</option><option>大阪府</option><option>兵庫県</option><option>奈良県</option><option>和歌山県</option>
   <option>鳥取県</option><option>島根県</option><option>岡山県</option><option>広島県</option><option>山口県</option><option>徳島県</option><option>香川県</option><option>愛媛県</option><option>高知県</option>
   <option>福岡県</option><option>佐賀県</option><option>長崎県</option><option>熊本県</option><option>大分県</option><option>宮崎県</option><option>鹿児島県</option><option>沖縄県</option>
@@ -79,7 +79,7 @@ const prefectureGroups = {
   北海道: "北海道・九州",
   青森県: "東北・関東・信越・北陸・東海", 岩手県: "東北・関東・信越・北陸・東海", 宮城県: "東北・関東・信越・北陸・東海", 秋田県: "東北・関東・信越・北陸・東海", 山形県: "東北・関東・信越・北陸・東海", 福島県: "東北・関東・信越・北陸・東海",
   茨城県: "東北・関東・信越・北陸・東海", 栃木県: "東北・関東・信越・北陸・東海", 群馬県: "東北・関東・信越・北陸・東海", 埼玉県: "埼玉県", 千葉県: "東北・関東・信越・北陸・東海", 東京都: "東北・関東・信越・北陸・東海", 神奈川県: "東北・関東・信越・北陸・東海",
-  山梨県: "東北・関東・信越・北陸・東海", 長野県: "東北・関東・信越・北陸・東海", 新潟県: "東北・関東・信越・北陸・東海", 富山県: "東北・関東・信越・北陸・東海", 石川県: "東北・関東・信越・北陸・東海", 福井県: "東北・関東・信越・北陸・東海", 岐阜県: "東北・関東・信越・北陸・東海", 静岡県: "東北・関東・信越・北陸・東海", 愛知県: "東北・関東・信越・北陸・東海",
+  山梨県: "東北・関東・信越・北陸・東海", 長野県: "東北・関東・信越・北陸・東海", 新潟県: "東北・関東・信越・北陸・東海", 富山県: "東北・関東・信越・北陸・東海", 石川県: "東北・関東・信越・北陸・東海", 福井県: "東北・関東・信越・北陸・東海", 岐阜県: "東北・関東・信越・北陸・東海", 静岡県: "東北・関東・信越・北陸・東海", 愛知県: "東北・関東・信越・北陸・東海", 三重県: "東北・関東・信越・北陸・東海",
   滋賀県: "近畿", 京都府: "近畿", 大阪府: "近畿", 兵庫県: "近畿", 奈良県: "近畿", 和歌山県: "近畿",
   鳥取県: "中国・四国", 島根県: "中国・四国", 岡山県: "中国・四国", 広島県: "中国・四国", 山口県: "中国・四国", 徳島県: "中国・四国", 香川県: "中国・四国", 愛媛県: "中国・四国", 高知県: "中国・四国",
   福岡県: "北海道・九州", 佐賀県: "北海道・九州", 長崎県: "北海道・九州", 熊本県: "北海道・九州", 大分県: "北海道・九州", 宮崎県: "北海道・九州", 鹿児島県: "北海道・九州", 沖縄県: "沖縄県"
@@ -116,6 +116,11 @@ function calcShippingFee(destPrefecture, weightKg) {
 function formatYen(amount) { return amount.toLocaleString() + "円"; }
 function calculateTaxIncluded(netAmount, taxRate) { return Math.floor(netAmount * taxRate); }
 
+// C・Dは指定重量のみ特別な税抜価格、それ以外は通常単価×重量。
+function calculateSpecialNetPrice(weight, regularUnitPrice, specialPrices) {
+  return specialPrices[weight] ?? regularUnitPrice * weight;
+}
+
 function calculate() {
   try {
     const destPrefecture = document.getElementById("destPrefecture").value;
@@ -133,11 +138,13 @@ function calculate() {
     document.getElementById("weight").value = weight;
     document.getElementById("shipping").value = shipping;
 
-    // 商品ごとに税抜単価×重量を計算し、商品ごとに税込金額を切り捨てる。
+    const cNet = calculateSpecialNetPrice(c, 863, { 1: 907, 2: 1764, 3: 2615, 5: 4315 });
+    const dNet = calculateSpecialNetPrice(d, 797, { 1: 841, 2: 1632, 3: 2417, 5: 3985 });
+    // 商品ごとに税抜金額へ8%を加え、商品ごとに税込金額を切り捨てる。
     const productTotal = calculateTaxIncluded(a * 1850, 1.08)
       + calculateTaxIncluded(b * 1450, 1.08)
-      + calculateTaxIncluded(c * 863, 1.08)
-      + calculateTaxIncluded(d * 797, 1.08);
+      + calculateTaxIncluded(cNet, 1.08)
+      + calculateTaxIncluded(dNet, 1.08);
     // 書籍は税抜合計（1,600円×個数）に10%を加え、1円未満を切り捨てる。
     const bookTotal = calculateTaxIncluded(1600 * bookCount, 1.10);
     const total = productTotal + bookTotal + shipping;
