@@ -129,7 +129,12 @@ kg
 <script>
 
 function formatYen(amount) {
-  return Math.round(amount).toLocaleString() + "円";
+  return amount.toLocaleString() + "円";
+}
+
+function calculateTaxIncluded(netAmount, taxRate) {
+  // 税込単価に丸めず、税抜金額に税率を掛けてから1円未満を切り捨てる。
+  return Math.floor(netAmount * taxRate);
 }
 
 function calculate() {
@@ -139,12 +144,13 @@ function calculate() {
   const c = Number(document.getElementById("c").value) || 0;
   const shipping = Number(document.getElementById("shipping").value) || 0;
 
-  const productTotal = (
-    a * 1850 +
-    b * 1450 +
-    c * 863
-  ) * 1.08;
-  const shippingTotal = shipping * 1.10;
+  // 商品ごとに税抜金額を計算し、それぞれ税込金額を切り捨ててから合計する。
+  const aTotal = calculateTaxIncluded(a * 1850, 1.08);
+  const bTotal = calculateTaxIncluded(b * 1450, 1.08);
+  const cTotal = calculateTaxIncluded(c * 863, 1.08);
+  const productTotal = aTotal + bTotal + cTotal;
+
+  const shippingTotal = calculateTaxIncluded(shipping, 1.10);
   const total = productTotal + shippingTotal;
 
   document.getElementById("productTotal").textContent = formatYen(productTotal);
