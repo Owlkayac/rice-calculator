@@ -34,11 +34,15 @@ label {
   margin-bottom: 8px;
 }
 
-input {
+input,
+select {
   width: 80%;
   padding: 14px;
   font-size: 20px;
   box-sizing: border-box;
+}
+
+input {
   text-align: right;
 }
 
@@ -88,6 +92,31 @@ button {
 <h1>発送請求額計算</h1>
 
 <div class="item">
+<label for="destPrefecture">配送先都道府県</label>
+<select id="destPrefecture">
+  <option value="">選択してください</option>
+  <option>北海道</option>
+  <option>青森県</option><option>岩手県</option><option>宮城県</option><option>秋田県</option><option>山形県</option><option>福島県</option>
+  <option>茨城県</option><option>栃木県</option><option>群馬県</option><option>埼玉県</option><option>千葉県</option><option>東京都</option><option>神奈川県</option>
+  <option>新潟県</option><option>富山県</option><option>石川県</option><option>福井県</option><option>山梨県</option><option>長野県</option><option>岐阜県</option><option>静岡県</option><option>愛知県</option><option>三重県</option>
+  <option>滋賀県</option><option>京都府</option><option>大阪府</option><option>兵庫県</option><option>奈良県</option><option>和歌山県</option>
+  <option>鳥取県</option><option>島根県</option><option>岡山県</option><option>広島県</option><option>山口県</option><option>徳島県</option><option>香川県</option><option>愛媛県</option><option>高知県</option>
+  <option>福岡県</option><option>佐賀県</option><option>長崎県</option><option>熊本県</option><option>大分県</option><option>宮崎県</option><option>鹿児島県</option><option>沖縄県</option>
+</select>
+</div>
+
+<div class="item">
+<label for="size">荷物サイズ</label>
+<select id="size">
+  <option value="">選択してください</option>
+  <option value="60">60サイズ</option>
+  <option value="80">80サイズ</option>
+  <option value="100">100サイズ</option>
+  <option value="120">120サイズ</option>
+</select>
+</div>
+
+<div class="item">
 <label>商品A　1,850円/kg（税抜・消費税8%）</label>
 <input id="a" type="number" min="0" step="0.01" placeholder="0">
 kg
@@ -107,7 +136,7 @@ kg
 
 <div class="item">
 <label for="shipping">送料（税抜）</label>
-<input id="shipping" type="number" min="0" step="1" placeholder="0">
+<input id="shipping" type="number" min="0" step="1" placeholder="配送先とサイズを選択" readonly>
 円
 </div>
 
@@ -127,6 +156,41 @@ kg
 </div>
 
 <script>
+// 都道府県から料金グループを決める第1段階のテーブル。
+const prefectureGroups = {
+  北海道: "遠方",
+  青森県: "近隣", 岩手県: "近隣", 宮城県: "近隣", 秋田県: "近隣", 山形県: "近隣", 福島県: "近隣",
+  茨城県: "近隣", 栃木県: "近隣", 群馬県: "近隣", 埼玉県: "県内", 千葉県: "近隣", 東京都: "近隣", 神奈川県: "近隣",
+  新潟県: "近隣", 富山県: "近隣", 石川県: "近隣", 福井県: "近隣", 山梨県: "近隣", 長野県: "近隣", 岐阜県: "近隣", 静岡県: "近隣", 愛知県: "近隣", 三重県: "近隣",
+  滋賀県: "近畿", 京都府: "近畿", 大阪府: "近畿", 兵庫県: "近畿", 奈良県: "近畿", 和歌山県: "近畿",
+  鳥取県: "中四国", 島根県: "中四国", 岡山県: "中四国", 広島県: "中四国", 山口県: "中四国", 徳島県: "中四国", 香川県: "中四国", 愛媛県: "中四国", 高知県: "中四国",
+  福岡県: "遠方", 佐賀県: "遠方", 長崎県: "遠方", 熊本県: "遠方", 大分県: "遠方", 宮崎県: "遠方", 鹿児島県: "遠方",
+  沖縄県: "沖縄"
+};
+
+// 料金グループとサイズから運賃を決める第2段階のテーブル。
+const shippingFees = {
+  県内: { 60: 820, 80: 1130, 100: 1450, 120: 1770 },
+  近隣: { 60: 880, 80: 1200, 100: 1500, 120: 1830 },
+  近畿: { 60: 990, 80: 1310, 100: 1620, 120: 1940 },
+  中四国: { 60: 1150, 80: 1440, 100: 1780, 120: 2080 },
+  遠方: { 60: 1410, 80: 1710, 100: 2020, 120: 2340 },
+  沖縄: { 60: 1450, 80: 1810, 100: 2160, 120: 2490 }
+};
+
+function calcShippingFee(destPrefecture, size) {
+  const group = prefectureGroups[destPrefecture];
+  if (!group) {
+    throw new Error(`未対応の都道府県です: ${destPrefecture}`);
+  }
+
+  const normalizedSize = String(size);
+  if (!Object.prototype.hasOwnProperty.call(shippingFees[group], normalizedSize)) {
+    throw new Error(`未対応のサイズです: ${size}`);
+  }
+
+  return shippingFees[group][normalizedSize];
+}
 
 function formatYen(amount) {
   return amount.toLocaleString() + "円";
@@ -138,28 +202,36 @@ function calculateTaxIncluded(netAmount, taxRate) {
 }
 
 function calculate() {
+  try {
+    const destPrefecture = document.getElementById("destPrefecture").value;
+    const size = document.getElementById("size").value;
+    const shipping = calcShippingFee(destPrefecture, size);
+    document.getElementById("shipping").value = shipping;
 
-  const a = Number(document.getElementById("a").value) || 0;
-  const b = Number(document.getElementById("b").value) || 0;
-  const c = Number(document.getElementById("c").value) || 0;
-  const shipping = Number(document.getElementById("shipping").value) || 0;
+    const a = Number(document.getElementById("a").value) || 0;
+    const b = Number(document.getElementById("b").value) || 0;
+    const c = Number(document.getElementById("c").value) || 0;
 
-  // 商品ごとに税抜金額を計算し、それぞれ税込金額を切り捨ててから合計する。
-  const aTotal = calculateTaxIncluded(a * 1850, 1.08);
-  const bTotal = calculateTaxIncluded(b * 1450, 1.08);
-  const cTotal = calculateTaxIncluded(c * 863, 1.08);
-  const productTotal = aTotal + bTotal + cTotal;
+    // 商品ごとに税抜金額を計算し、それぞれ税込金額を切り捨ててから合計する。
+    const aTotal = calculateTaxIncluded(a * 1850, 1.08);
+    const bTotal = calculateTaxIncluded(b * 1450, 1.08);
+    const cTotal = calculateTaxIncluded(c * 863, 1.08);
+    const productTotal = aTotal + bTotal + cTotal;
 
-  const shippingTotal = calculateTaxIncluded(shipping, 1.10);
-  const total = productTotal + shippingTotal;
+    const shippingTotal = calculateTaxIncluded(shipping, 1.10);
+    const total = productTotal + shippingTotal;
 
-  document.getElementById("productTotal").textContent = formatYen(productTotal);
-  document.getElementById("shippingTotal").textContent = formatYen(shippingTotal);
-  document.getElementById("total").textContent = formatYen(total);
+    document.getElementById("productTotal").textContent = formatYen(productTotal);
+    document.getElementById("shippingTotal").textContent = formatYen(shippingTotal);
+    document.getElementById("total").textContent = formatYen(total);
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
 function clearAll() {
-
+  document.getElementById("destPrefecture").value = "";
+  document.getElementById("size").value = "";
   document.getElementById("a").value = "";
   document.getElementById("b").value = "";
   document.getElementById("c").value = "";
