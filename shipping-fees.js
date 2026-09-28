@@ -21,3 +21,21 @@ const shippingFees = {
   "北海道・九州": { "〜5kg": 1023, "5kg超〜10kg": 1265, "10kg超〜20kg": 1507, "20kg超〜24kg": 1760 },
   "沖縄県": { "〜5kg": 1056, "5kg超〜10kg": 1342, "10kg超〜20kg": 1622, "20kg超〜24kg": 1908 }
 };
+
+// 包装の種類ごとに、合計重量から「上の送料表のどの列を使うか」を決めるルール。
+// 上から順に見て、合計重量が maxKg 以下になった最初の行の column（列の名前）の送料を使う。
+const packagingRules = {
+  // 普通計算：重量帯そのままの送料（1番〜4番）。
+  normal: [
+    { maxKg: 5, column: "〜5kg" },
+    { maxKg: 10, column: "5kg超〜10kg" },
+    { maxKg: 20, column: "10kg超〜20kg" },
+    { maxKg: 24, column: "20kg超〜24kg" }
+  ],
+  // 簡易包装計算：〜5kgは1番、5kg超〜14kgは2番、14kg超〜24kgは3番の送料（4番は使わない）。
+  simple: [
+    { maxKg: 5, column: "〜5kg" },
+    { maxKg: 14, column: "5kg超〜10kg" },
+    { maxKg: 24, column: "10kg超〜20kg" }
+  ]
+};
