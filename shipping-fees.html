@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>送り先別の送料一覧</title>
+<style>
+/* 4列の表をスマホ（幅320px）でも収めるため、計算画面より外側の余白を小さくしている */
+body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f5; padding: 10px; }
+.container { max-width: 500px; margin: auto; background: white; padding: 16px; border-radius: 20px; }
+h1 { text-align: center; font-size: 24px; }
+.note { font-size: 14px; color: #555; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
+th, td { border: 1px solid #ccc; padding: 8px 3px; }
+thead th { background: #eee; font-size: 13px; }
+tbody th { text-align: left; background: #f7f7f7; }
+td { text-align: right; white-space: nowrap; }
+.prefectures { display: block; font-size: 12px; font-weight: normal; color: #555; margin-top: 4px; }
+.link { text-align: center; margin-top: 20px; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>送り先別の送料一覧</h1>
+<p class="note">送料はすべて税込です。重さは書籍を除いた合計重量です。24kgを超える場合は2箱に分けてください。</p>
+<table>
+<thead><tr id="bandHeader"></tr></thead>
+<tbody id="feeRows"></tbody>
+</table>
+<p class="link"><a href="index.html">請求額の計算に戻る</a></p>
+</div>
+<script src="shipping-fees.js"></script>
+<script>
+// 表の中身は shipping-fees.js（計算と同じ送料テーブル）から作る。
+const groups = Object.keys(shippingFees);
+const bands = Object.keys(shippingFees[groups[0]]);
+
+// 見出し：重量帯を 1番〜4番 と番号で表示し、下に重さの範囲を書く。
+const header = document.getElementById("bandHeader");
+bands.forEach((band, index) => {
+  const th = document.createElement("th");
+  th.append(`${index + 1}番`, document.createElement("br"), band);
+  header.appendChild(th);
+});
+
+// 行：送り先グループごとに2行使う。1行目に送り先と都道府県、2行目に各重量帯の送料。
+// （スマホの狭い画面でも横にはみ出さないように、送り先を横いっぱいの行にする）
+const rows = document.getElementById("feeRows");
+groups.forEach(group => {
+  const nameRow = document.createElement("tr");
+  const th = document.createElement("th");
+  th.colSpan = bands.length;
+  th.textContent = group;
+  const prefectureNames = Object.keys(prefectureGroups).filter(p => prefectureGroups[p] === group).join("、");
+  // 埼玉県・沖縄県のように、グループ名と都道府県名が同じなら2回は書かない。
+  if (prefectureNames !== group) {
+    const prefectures = document.createElement("span");
+    prefectures.className = "prefectures";
+    prefectures.textContent = prefectureNames;
+    th.appendChild(prefectures);
+  }
+  nameRow.appendChild(th);
+  rows.appendChild(nameRow);
+
+  const tr = document.createElement("tr");
+  bands.forEach(band => {
+    const td = document.createElement("td");
+    td.textContent = shippingFees[group][band].toLocaleString("ja-JP") + "円";
+    tr.appendChild(td);
+  });
+  rows.appendChild(tr);
+});
+</script>
+</body>
+</html>

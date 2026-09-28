@@ -18,6 +18,7 @@ button { width: 100%; padding: 16px; font-size: 18px; margin-top: 15px; border: 
 .result-line { margin: 8px 0; }
 .total-label { margin-top: 18px; }
 .total { font-size: 32px; font-weight: bold; }
+.link { text-align: center; margin-top: 25px; }
 </style>
 </head>
 <body>
@@ -85,29 +86,10 @@ button { width: 100%; padding: 16px; font-size: 18px; margin-top: 15px; border: 
 <div class="result-line">送料（税込・10%）</div><div id="shippingTotal">0円</div>
 <div class="result-line total-label">請求額（税込）</div><div class="total" id="total">0円</div>
 </div>
+<p class="link"><a href="shipping-fees.html">送り先別の送料一覧を見る</a></p>
 </div>
+<script src="shipping-fees.js"></script>
 <script>
-// 都道府県から送料グループを決めるテーブル。
-const prefectureGroups = {
-  北海道: "北海道・九州",
-  青森県: "東北・関東・信越・北陸・東海", 岩手県: "東北・関東・信越・北陸・東海", 宮城県: "東北・関東・信越・北陸・東海", 秋田県: "東北・関東・信越・北陸・東海", 山形県: "東北・関東・信越・北陸・東海", 福島県: "東北・関東・信越・北陸・東海",
-  茨城県: "東北・関東・信越・北陸・東海", 栃木県: "東北・関東・信越・北陸・東海", 群馬県: "東北・関東・信越・北陸・東海", 埼玉県: "埼玉県", 千葉県: "東北・関東・信越・北陸・東海", 東京都: "東北・関東・信越・北陸・東海", 神奈川県: "東北・関東・信越・北陸・東海",
-  新潟県: "東北・関東・信越・北陸・東海", 富山県: "東北・関東・信越・北陸・東海", 石川県: "東北・関東・信越・北陸・東海", 福井県: "東北・関東・信越・北陸・東海", 山梨県: "東北・関東・信越・北陸・東海", 長野県: "東北・関東・信越・北陸・東海", 岐阜県: "東北・関東・信越・北陸・東海", 静岡県: "東北・関東・信越・北陸・東海", 愛知県: "東北・関東・信越・北陸・東海", 三重県: "東北・関東・信越・北陸・東海",
-  滋賀県: "近畿", 京都府: "近畿", 大阪府: "近畿", 兵庫県: "近畿", 奈良県: "近畿", 和歌山県: "近畿",
-  鳥取県: "中国・四国", 島根県: "中国・四国", 岡山県: "中国・四国", 広島県: "中国・四国", 山口県: "中国・四国", 徳島県: "中国・四国", 香川県: "中国・四国", 愛媛県: "中国・四国", 高知県: "中国・四国",
-  福岡県: "北海道・九州", 佐賀県: "北海道・九州", 長崎県: "北海道・九州", 熊本県: "北海道・九州", 大分県: "北海道・九州", 宮崎県: "北海道・九州", 鹿児島県: "北海道・九州", 沖縄県: "沖縄県"
-};
-
-// 送料グループと重量帯（いずれも税込）のテーブル。
-const shippingFees = {
-  "埼玉県": { "〜5kg": 605, "5.1〜10kg": 797, "10.1〜20kg": 1050, "20.1〜24kg": 1303 },
-  "東北・関東・信越・北陸・東海": { "〜5kg": 610, "5.1〜10kg": 854, "10.1〜20kg": 1092, "20.1〜24kg": 1353 },
-  "近畿": { "〜5kg": 693, "5.1〜10kg": 942, "10.1〜20kg": 1188, "20.1〜24kg": 1441 },
-  "中国・四国": { "〜5kg": 818, "5.1〜10kg": 1045, "10.1〜20kg": 1314, "20.1〜24kg": 1556 },
-  "北海道・九州": { "〜5kg": 1023, "5.1〜10kg": 1265, "10.1〜20kg": 1507, "20.1〜24kg": 1760 },
-  "沖縄県": { "〜5kg": 1056, "5.1〜10kg": 1342, "10.1〜20kg": 1622, "20.1〜24kg": 1908 }
-};
-
 const MAX_WEIGHT_KG = 24;
 
 // 重量0（書籍のみの注文）は最小の重量帯で送る。
@@ -116,16 +98,19 @@ function getWeightBand(weight) {
     throw new Error(`合計重量が${MAX_WEIGHT_KG}kgを超えています（${weight}kg）。2箱に分けて計算してください`);
   }
   if (weight <= 5) return "〜5kg";
-  if (weight <= 10) return "5.1〜10kg";
-  if (weight <= 20) return "10.1〜20kg";
-  return "20.1〜24kg";
+  if (weight <= 10) return "5kg超〜10kg";
+  if (weight <= 20) return "10kg超〜20kg";
+  return "20kg超〜24kg";
 }
 
 function calcShippingFee(destPrefecture, weight) {
   if (destPrefecture === "") throw new Error("配送先都道府県を選んでください");
   const group = prefectureGroups[destPrefecture];
   if (!group) throw new Error(`送料が設定されていない都道府県です: ${destPrefecture}`);
-  return shippingFees[group][getWeightBand(weight)];
+  const band = getWeightBand(weight);
+  const fee = shippingFees[group]?.[band];
+  if (typeof fee !== "number") throw new Error(`送料の設定が見つかりません: ${group} / ${band}`);
+  return fee;
 }
 
 function formatYen(amount) { return amount.toLocaleString() + "円"; }
