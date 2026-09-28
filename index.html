@@ -130,73 +130,98 @@ function calcShippingFee(destPrefecture, weight) {
 
 function formatYen(amount) { return amount.toLocaleString() + "円"; }
 
-// 小数計算の誤差（例: 1759.9999999）で1円少なくならないよう、丸めてから切り捨てる。
-function floorYen(amount) { return Math.floor(Math.round(amount * 1000) / 1000); }
+// 税込額の1円未満を切り捨てる。小数の計算誤差を避けるため、分子・分母とも整数で渡す。
+function floorDivide(numerator, denominator) { return Math.floor(numerator / denominator); }
 
-// 空欄は0、マイナスや数値以外はエラーにする。
-function readNonNegative(id, label, mustBeInteger = false) {
-  const raw = document.getElementById(id).value;
+// 入力を「小数第decimals位まで」の数値として読み、10^decimals倍した整数で返す（例: 1.25kg → 125）。
+// 空欄は0。マイナス・数値以外・桁数オーバーはエラーにする。
+function readAmount(id, label, decimals) {
+  const input = document.getElementById(id);
+  // 「1.2.3」など読めない入力は、ブラウザが空欄として渡すため先に調べる。
+  if (input.validity.badInput) throw new Error(`${label}は数値で入力してください`);
+  const raw = input.value.trim();
   if (raw === "") return 0;
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value < 0) throw new Error(`${label}は0以上の数値で入力してください`);
-  if (mustBeInteger && !Number.isInteger(value)) throw new Error(`${label}は0以上の整数で入力してください`);
-  return value;
+  const match = raw.match(/^\d+(?:\.(\d+))?$/);
+  if (!match) throw new Error(`${label}は0以上の数値で入力してください`);
+  const fraction = match[1] ?? "";
+  if (fraction.length > decimals) {
+    throw new Error(decimals === 0 ? `${label}は整数で入力してください` : `${label}は小数第${decimals}位までで入力してください`);
+  }
+  return Math.round(Number(raw) * 10 ** decimals);
 }
 
-// C・Dは指定重量のみ特別な税抜価格、それ以外は通常単価×重量。
-function calculateSpecialNetPrice(weight, regularUnitPrice, specialPrices) {
-  return specialPrices[weight] ?? regularUnitPrice * weight;
+// 税込額（1円未満切り捨て）。重量は0.01kg単位の整数、単価は円/kg。
+// 指定重量ちょうどのときだけ特別な税抜価格を使う（C・D）。
+function productTaxIncluded(weightCentiKg, unitPrice, specialPrices = {}) {
+  const special = specialPrices[weightCentiKg / 100];
+  // 税抜額を「0.01円単位」の整数にそろえてから8%を加える。
+  // 割る数の 100 * 100 は、「0.01円単位を円に戻す100」と「108%の%を外す100」。
+  const netCentiYen = special !== undefined ? special * 100 : unitPrice * weightCentiKg;
+  return floorDivide(netCentiYen * 108, 100 * 100);
 }
+
+function showResults(values) {
+  ["weight", "shipping"].forEach(id => { document.getElementById(id).value = values[id] ?? ""; });
+  ["productTotal", "riceFlourTotal", "bookTotal", "shippingTotal", "total"].forEach(id => {
+    document.getElementById(id).textContent = formatYen(values[id] ?? 0);
+  });
+}
+
+// 前回の結果を消す（エラー時・入力変更時に、古い請求額が残らないようにする）。
+function resetResults() { showResults({}); }
 
 function calculate() {
   try {
     const destPrefecture = document.getElementById("destPrefecture").value;
-    const a = readNonNegative("a", "商品Aの重量");
-    const b = readNonNegative("b", "商品Bの重量");
-    const c = readNonNegative("c", "商品Cの重量");
-    const d = readNonNegative("d", "商品Dの重量");
-    const e = readNonNegative("e", "商品Eの重量");
-    const f = readNonNegative("f", "商品Fの重量");
-    const riceFlourWeight = readNonNegative("riceFlourWeight", "米粉の重量", true);
-    const bookCount = readNonNegative("bookCount", "書籍の個数", true);
+    // 商品A〜Fの重量は0.01kg単位、米粉はg単位、書籍は個数（いずれも整数）。
+    const a = readAmount("a", "商品Aの重量", 2);
+    const b = readAmount("b", "商品Bの重量", 2);
+    const c = readAmount("c", "商品Cの重量", 2);
+    const d = readAmount("d", "商品Dの重量", 2);
+    const e = readAmount("e", "商品Eの重量", 2);
+    const f = readAmount("f", "商品Fの重量", 2);
+    const riceFlourWeight = readAmount("riceFlourWeight", "米粉の重量", 0);
+    const bookCount = readAmount("bookCount", "書籍の個数", 0);
 
     if (a + b + c + d + e + f + riceFlourWeight + bookCount === 0) {
       throw new Error("商品の数量を入力してください");
     }
 
-    // 合計重量は商品A〜F＋米粉（gをkgに換算）。書籍は含めない。
-    const weight = Math.round((a + b + c + d + e + f + riceFlourWeight / 1000) * 1000) / 1000;
+    // 合計重量は商品A〜F＋米粉。書籍は含めない。g単位で足してからkgにする。
+    const weight = ((a + b + c + d + e + f) * 10 + riceFlourWeight) / 1000;
     const shipping = calcShippingFee(destPrefecture, weight);
-    document.getElementById("weight").value = weight;
-    document.getElementById("shipping").value = shipping;
 
-    // C・Dは指定重量のみ特別価格（税抜）。
-    const cNet = calculateSpecialNetPrice(c, 863, { 1: 907, 2: 1764, 3: 2615, 5: 4315 });
-    const dNet = calculateSpecialNetPrice(d, 797, { 1: 841, 2: 1632, 3: 2417, 5: 3985 });
     // 商品ごとに税抜金額へ8%を加え、商品ごとに税込金額を切り捨てる。
-    const productTotal = floorYen(a * 1850 * 1.08)
-      + floorYen(b * 1450 * 1.08)
-      + floorYen(cNet * 1.08)
-      + floorYen(dNet * 1.08)
-      + floorYen(e * 597 * 1.08)
-      + floorYen(f * 1400 * 1.08);
-    const riceFlourTotal = floorYen(270 * (riceFlourWeight / 300) * 1.08);
+    const productTotal = productTaxIncluded(a, 1850)
+      + productTaxIncluded(b, 1450)
+      + productTaxIncluded(c, 863, { 1: 907, 2: 1764, 3: 2615, 5: 4315 })
+      + productTaxIncluded(d, 797, { 1: 841, 2: 1632, 3: 2417, 5: 3985 })
+      + productTaxIncluded(e, 597)
+      + productTaxIncluded(f, 1400);
+    // 米粉は300gあたり270円（税抜）に8%を加え、1円未満を切り捨てる。
+    const riceFlourTotal = floorDivide(270 * riceFlourWeight * 108, 300 * 100);
     // 書籍は税抜合計（1,600円×個数）に10%を加え、1円未満を切り捨てる。
-    const bookTotal = floorYen(1600 * bookCount * 1.10);
+    const bookTotal = floorDivide(1600 * bookCount * 110, 100);
     const total = productTotal + riceFlourTotal + bookTotal + shipping;
 
-    document.getElementById("productTotal").textContent = formatYen(productTotal);
-    document.getElementById("riceFlourTotal").textContent = formatYen(riceFlourTotal);
-    document.getElementById("bookTotal").textContent = formatYen(bookTotal);
-    document.getElementById("shippingTotal").textContent = formatYen(shipping);
-    document.getElementById("total").textContent = formatYen(total);
-  } catch (error) { alert(error.message); }
+    showResults({ weight, shipping, productTotal, riceFlourTotal, bookTotal, shippingTotal: shipping, total });
+  } catch (error) {
+    resetResults();
+    alert(error.message);
+  }
 }
 
 function clearAll() {
-  ["destPrefecture", "a", "b", "c", "d", "e", "f", "riceFlourWeight", "bookCount", "weight", "shipping"].forEach(id => { document.getElementById(id).value = ""; });
-  ["productTotal", "riceFlourTotal", "bookTotal", "shippingTotal", "total"].forEach(id => { document.getElementById(id).textContent = "0円"; });
+  ["destPrefecture", "a", "b", "c", "d", "e", "f", "riceFlourWeight", "bookCount"].forEach(id => { document.getElementById(id).value = ""; });
+  resetResults();
 }
+
+// 入力を変えたら、計算し直すまで古い結果を表示しない。
+document.querySelectorAll("#destPrefecture, input:not([readonly])").forEach(el => {
+  // 古いiPhoneは選択欄でinputが起きないため、changeでも消す。
+  el.addEventListener("input", resetResults);
+  el.addEventListener("change", resetResults);
+});
 </script>
 </body>
 </html>
