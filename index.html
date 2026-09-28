@@ -109,7 +109,8 @@ button { width: 100%; padding: 16px; font-size: 18px; margin-top: 15px; border: 
 </div>
 <p class="link"><a href="shipping-fees.html">送り先別の送料一覧を見る</a></p>
 </div>
-<script src="shipping-fees.js"></script>
+<!-- ?v=2 は版の印。shipping-fees.js を変えたら数字を上げ、スマホが古いファイルを使い回さないようにする -->
+<script src="shipping-fees.js?v=2"></script>
 <script>
 // 価格表（税抜）。画面のラベルと計算の両方がここを使う。価格を変えるときはここだけ直す。
 // （税率の8%・10%は、ラベル・結果欄の文字と計算の108・110の両方に書いてある。税率を変えるときは両方直す）
@@ -132,14 +133,7 @@ const MAX_WEIGHT_KG = 24;
 let packaging = "normal";
 const packagingNames = { normal: "普通", simple: "簡易包装" };
 
-// 送料の列の番号（1番〜4番）。shipping-fees.html の一覧と同じく、最初のグループの列の順番で数える。
-function bandNumber(band) {
-  const index = Object.keys(shippingFees[Object.keys(shippingFees)[0]]).indexOf(band);
-  if (index === -1) throw new Error(`送料の列が見つかりません: ${band}`);
-  return index + 1;
-}
-
-// 合計重量から、送料表のどの列（重量帯）を使うかを返す。簡易包装では実際の重さと違う列になることがある。
+// 合計重量から、送料表のどの列（1番〜4番）を使うかを返す。列の決め方は包装の種類（タブ）で違う。
 // 重量0（書籍のみの注文）は最小の重量帯で送る。
 function getWeightBand(weight) {
   if (weight > MAX_WEIGHT_KG) {
@@ -196,7 +190,7 @@ function productTaxIncluded(weightCentiKg, unitPrice, specialPrices = {}) {
 
 function showResults(values) {
   // 例：「（簡易包装・2番）」。どちらのタブで計算した送料かを結果だけで分かるようにする。
-  document.getElementById("shippingBand").textContent = values.band ? `（${packagingNames[packaging]}・${bandNumber(values.band)}番）` : "";
+  document.getElementById("shippingBand").textContent = values.band ? `（${packagingNames[packaging]}・${values.band}）` : "";
   ["weight", "shipping"].forEach(id => { document.getElementById(id).value = values[id] ?? ""; });
   ["productTotal", "riceFlourTotal", "bookTotal", "shippingTotal", "total"].forEach(id => {
     document.getElementById(id).textContent = formatYen(values[id] ?? 0);
@@ -263,13 +257,7 @@ function showPackaging() {
     tab.setAttribute("aria-selected", m === mode);
   });
   // 例：「送料：〜5kg→1番、5kg超〜14kg→2番、14kg超〜24kg→3番」
-  let previousMaxKg = 0;
-  const ranges = packagingRules[mode].map(rule => {
-    const range = previousMaxKg === 0 ? `〜${rule.maxKg}kg` : `${previousMaxKg}kg超〜${rule.maxKg}kg`;
-    previousMaxKg = rule.maxKg;
-    return `${range}→${bandNumber(rule.column)}番`;
-  });
-  document.getElementById("packagingNote").textContent = `送料：${ranges.join("、")}`;
+  document.getElementById("packagingNote").textContent = `送料：${describePackagingRule(packagingRules[mode])}`;
 }
 
 // 入力を変えたら、計算し直すまで古い結果を表示しない。
