@@ -16,6 +16,7 @@ thead th { background: #eee; font-size: 13px; }
 tbody th { text-align: left; background: #f7f7f7; }
 td { text-align: right; white-space: nowrap; }
 .prefectures { display: block; font-size: 12px; font-weight: normal; color: #555; margin-top: 4px; }
+#ruleNotes { padding-left: 20px; margin-top: 4px; }
 .link { text-align: center; margin-top: 20px; }
 </style>
 </head>
@@ -23,24 +24,36 @@ td { text-align: right; white-space: nowrap; }
 <div class="container">
 <h1>送り先別の送料一覧</h1>
 <p class="note">送料はすべて税込です。重さは書籍を除いた合計重量です。24kgを超える場合は2箱に分けてください。</p>
+<p class="note">どの重さでどの番号の送料を使うか：</p>
+<ul class="note" id="ruleNotes"></ul>
 <table>
 <thead><tr id="bandHeader"></tr></thead>
 <tbody id="feeRows"></tbody>
 </table>
 <p class="link"><a href="index.html">請求額の計算に戻る</a></p>
 </div>
-<script src="shipping-fees.js"></script>
+<script src="shipping-fees.js?v=2"></script>
 <script>
 // 表の中身は shipping-fees.js（計算と同じ送料テーブル）から作る。
 const groups = Object.keys(shippingFees);
 const bands = Object.keys(shippingFees[groups[0]]);
 
-// 見出し：重量帯を 1番〜4番 と番号で表示し、下に重さの範囲を書く。
+// 見出し：送料の列の番号（1番〜4番）。重さとの対応は包装の種類で違うので、表の下に書く。
 const header = document.getElementById("bandHeader");
-bands.forEach((band, index) => {
+bands.forEach(band => {
   const th = document.createElement("th");
-  th.append(`${index + 1}番`, document.createElement("br"), band);
+  th.textContent = band;
   header.appendChild(th);
+});
+
+// 表の下：普通計算・簡易包装計算それぞれの、重さと番号の対応（計算と同じルールから作る）。
+const ruleNotes = document.getElementById("ruleNotes");
+[["普通計算", packagingRules.normal], ["簡易包装計算", packagingRules.simple]].forEach(([name, rules]) => {
+  const li = document.createElement("li");
+  // 使わない番号があれば書き添える（例：簡易包装は4番を使わない）。
+  const unused = bands.filter(band => !rules.some(rule => rule.column === band));
+  li.textContent = `${name}：${describePackagingRule(rules)}` + (unused.length ? `（${unused.join("・")}は使わない）` : "");
+  ruleNotes.appendChild(li);
 });
 
 // 行：送り先グループごとに2行使う。1行目に送り先と都道府県、2行目に各重量帯の送料。
