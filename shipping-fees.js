@@ -40,6 +40,11 @@ const packagingRules = {
     { maxKg: 24, column: "3番" }
   ]
 };
+// 期間限定版：送料の決め方は普通計算と同じ（送料が無料になる条件は下の freeShippingThresholdYen）。
+packagingRules.limited = packagingRules.normal;
+
+// 期間限定版で送料が無料になる、税抜のお米（商品A〜F）・書籍・米粉の合計金額（円）。この金額以上で無料。
+const freeShippingThresholdYen = 10000;
 
 // 重さと列の対応を文章にする（例：「〜4.5kg→1番、4.5kg超〜10kg→2番、…」）。計算画面と一覧ページで使う。
 function describePackagingRule(rules) {
