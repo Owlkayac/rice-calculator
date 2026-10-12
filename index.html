@@ -23,8 +23,10 @@ button { width: 100%; padding: 16px; font-size: 18px; margin-top: 15px; border: 
 .actions button { margin-top: 0; padding: 16px 8px; white-space: nowrap; }
 .actions .calc { flex: 2; }
 .actions .clear { flex: 1; min-width: 80px; }
-.tabs { display: flex; gap: 8px; }
-.tab { flex: 1; margin-top: 0; padding: 12px; font-size: 16px; background: #ddd; color: black; }
+.tabs { display: flex; gap: 6px; }
+/* 3つ並べても幅320pxで収まるよう、文字を小さめにし、折り返す位置を .nb の区切りに決めている */
+.tab { flex: 1; margin-top: 0; padding: 12px 2px; font-size: 13px; background: #ddd; color: black; }
+.nb { display: inline-block; }
 .tab.active { background: #222; color: white; }
 .tab-note { font-size: 14px; color: #555; text-align: center; }
 #shippingBand { white-space: nowrap; }
@@ -40,7 +42,8 @@ button { width: 100%; padding: 16px; font-size: 18px; margin-top: 15px; border: 
 <h1>発送請求額計算</h1>
 <div class="tabs" role="tablist">
 <button type="button" class="tab active" id="tab-normal" role="tab" aria-selected="true" onclick="selectPackaging('normal')">普通計算</button>
-<button type="button" class="tab" id="tab-simple" role="tab" aria-selected="false" onclick="selectPackaging('simple')">簡易包装計算</button>
+<button type="button" class="tab" id="tab-simple" role="tab" aria-selected="false" onclick="selectPackaging('simple')"><span class="nb">簡易包装</span><span class="nb">計算</span></button>
+<button type="button" class="tab" id="tab-limited" role="tab" aria-selected="false" onclick="selectPackaging('limited')"><span class="nb">期間限定</span><span class="nb">版</span></button>
 </div>
 <p class="tab-note" id="packagingNote"></p>
 <div class="item">
@@ -110,12 +113,13 @@ button { width: 100%; padding: 16px; font-size: 18px; margin-top: 15px; border: 
 <div class="result-line">米ぬか（税込・8%）</div><div id="riceBranTotal">0円</div>
 <div class="result-line">書籍（税込・10%）</div><div id="bookTotal">0円</div>
 <div class="result-line">送料（税込・10%）<span id="shippingBand"></span></div><div id="shippingTotal">0円</div>
+<div class="tab-note" id="freeShippingNote"></div>
 <div class="result-line total-label">請求額（税込）</div><div class="total" id="total">0円</div>
 </div>
 <p class="link"><a href="shipping-fees.html">送り先別の送料一覧を見る</a></p>
 </div>
-<!-- ?v=2 は版の印。shipping-fees.js を変えたら数字を上げ、スマホが古いファイルを使い回さないようにする -->
-<script src="shipping-fees.js?v=2"></script>
+<!-- ?v=3 は版の印。shipping-fees.js を変えたら数字を上げ、スマホが古いファイルを使い回さないようにする -->
+<script src="shipping-fees.js?v=3"></script>
 <script>
 // 価格表（税抜）。画面のラベルと計算の両方がここを使う。価格を変えるときはここだけ直す。
 // （税率の8%・10%は、ラベル・結果欄の文字と計算の108・110の両方に書いてある。税率を変えるときは両方直す）
@@ -135,9 +139,9 @@ const MAX_BOOK_COUNT = 999;                       // 書籍の個数の上限（
 
 const MAX_WEIGHT_KG = 24;
 
-// いま選んでいるタブ（"normal"＝普通計算、"simple"＝簡易包装計算）。
+// いま選んでいるタブ（"normal"＝普通計算、"simple"＝簡易包装計算、"limited"＝期間限定版）。
 let packaging = "normal";
-const packagingNames = { normal: "普通", simple: "簡易包装" };
+const packagingNames = { normal: "普通", simple: "簡易包装", limited: "期間限定" };
 
 // 合計重量から、送料表のどの列（1番〜4番）を使うかを返す。列の決め方は包装の種類（タブ）で違う。
 // 重量0（書籍のみの注文）は最小の重量帯で送る。
@@ -195,6 +199,8 @@ function productTaxIncluded(weightCentiKg, unitPrice) {
 function showResults(values) {
   // 例：「（簡易包装・2番）」。どちらのタブで計算した送料かを結果だけで分かるようにする。
   document.getElementById("shippingBand").textContent = values.band ? `（${packagingNames[packaging]}・${values.band}）` : "";
+  // 期間限定版：送料が無料になるかどうかの判定に使った税抜合計を表示する。
+  document.getElementById("freeShippingNote").textContent = values.freeShippingNote ?? "";
   ["weight", "shipping"].forEach(id => { document.getElementById(id).value = values[id] ?? ""; });
   ["productTotal", "riceFlourTotal", "riceBranTotal", "bookTotal", "shippingTotal", "total"].forEach(id => {
     document.getElementById(id).textContent = formatYen(values[id] ?? 0);
@@ -222,7 +228,10 @@ function calculate() {
 
     // 合計重量は商品A〜F＋米粉＋米ぬか。書籍は含めない。g単位で足してからkgにする。
     const weight = (productWeightSum * 10 + riceFlourWeight + riceBranWeight) / 1000;
-    const { fee: shipping, band } = calcShippingFee(destPrefecture, weight);
+    const shippingFee = calcShippingFee(destPrefecture, weight);
+    let shipping = shippingFee.fee;
+    let band = shippingFee.band;
+    let freeShippingNote = "";
 
     // 商品ごとに税抜金額へ8%を加え、商品ごとに税込金額を切り捨てる。
     const productTotal = products.reduce(
@@ -233,9 +242,25 @@ function calculate() {
     const riceBranTotal = floorDivide(riceBran.price * riceBranWeight * 108, riceBran.perGrams * 100);
     // 書籍は税抜合計（1,600円×個数）に10%を加え、1円未満を切り捨てる。
     const bookTotal = floorDivide(bookPrice * bookCount * 110, 100);
+
+    // 期間限定版：税抜のお米（商品A〜F）・書籍・米粉の合計が10,000円以上なら送料無料。未満なら普通の送料。
+    // 米ぬかは判定の合計に含めない。端数が出ないよう「0.01円単位」の整数で比べる。
+    // （米粉の式は今の価格 270円/300g だと割り切れる。価格や単位を変えるときは割り切れるか確認する）
+    if (packaging === "limited") {
+      const netCentiYen = products.reduce((sum, product, i) => sum + product.unitPrice * weights[i], 0)
+        + riceFlour.price * riceFlourWeight * 100 / riceFlour.perGrams
+        + bookPrice * bookCount * 100;
+      const isFree = netCentiYen >= freeShippingThresholdYen * 100;
+      if (isFree) {
+        shipping = 0;
+        band = "送料無料";
+      }
+      freeShippingNote = `送料無料の判定：税抜のお米（商品A〜F）・書籍・米粉の合計 ${formatYen(Math.floor(netCentiYen / 100))}`
+        + `（${formatYen(freeShippingThresholdYen)}以上で無料）`;
+    }
     const total = productTotal + riceFlourTotal + riceBranTotal + bookTotal + shipping;
 
-    showResults({ weight, shipping, band, productTotal, riceFlourTotal, riceBranTotal, bookTotal, shippingTotal: shipping, total });
+    showResults({ weight, shipping, band, freeShippingNote, productTotal, riceFlourTotal, riceBranTotal, bookTotal, shippingTotal: shipping, total });
   } catch (error) {
     resetResults();
     alert(error.message);
@@ -258,13 +283,14 @@ function selectPackaging(mode) {
 // いま選んでいるタブの見た目と、送料の対応表の説明文を表示する。
 function showPackaging() {
   const mode = packaging;
-  ["normal", "simple"].forEach(m => {
+  ["normal", "simple", "limited"].forEach(m => {
     const tab = document.getElementById(`tab-${m}`);
     tab.classList.toggle("active", m === mode);
     tab.setAttribute("aria-selected", m === mode);
   });
   // 例：「送料：〜5kg→1番、5kg超〜14kg→2番、14kg超〜24kg→3番」
-  document.getElementById("packagingNote").textContent = `送料：${describePackagingRule(packagingRules[mode])}`;
+  const freeShippingText = mode === "limited" ? `。税抜のお米（商品A〜F）・書籍・米粉の合計が${formatYen(freeShippingThresholdYen)}以上なら送料無料（米ぬかは合計に含まない）` : "";
+  document.getElementById("packagingNote").textContent = `送料：${describePackagingRule(packagingRules[mode])}${freeShippingText}`;
 }
 
 // 入力を変えたら、計算し直すまで古い結果を表示しない。

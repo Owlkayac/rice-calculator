@@ -32,7 +32,7 @@ td { text-align: right; white-space: nowrap; }
 </table>
 <p class="link"><a href="index.html">請求額の計算に戻る</a></p>
 </div>
-<script src="shipping-fees.js?v=2"></script>
+<script src="shipping-fees.js?v=3"></script>
 <script>
 // 表の中身は shipping-fees.js（計算と同じ送料テーブル）から作る。
 const groups = Object.keys(shippingFees);
@@ -46,13 +46,14 @@ bands.forEach(band => {
   header.appendChild(th);
 });
 
-// 表の下：普通計算・簡易包装計算それぞれの、重さと番号の対応（計算と同じルールから作る）。
+// 表の下：普通計算・簡易包装計算・期間限定版それぞれの、重さと番号の対応（計算と同じルールから作る）。
 const ruleNotes = document.getElementById("ruleNotes");
-[["普通計算", packagingRules.normal], ["簡易包装計算", packagingRules.simple]].forEach(([name, rules]) => {
+[["普通計算", packagingRules.normal], ["簡易包装計算", packagingRules.simple], ["期間限定版", packagingRules.limited]].forEach(([name, rules]) => {
   const li = document.createElement("li");
   // 使わない番号があれば書き添える（例：簡易包装は4番を使わない）。
   const unused = bands.filter(band => !rules.some(rule => rule.column === band));
-  li.textContent = `${name}：${describePackagingRule(rules)}` + (unused.length ? `（${unused.join("・")}は使わない）` : "");
+  li.textContent = `${name}：${describePackagingRule(rules)}` + (unused.length ? `（${unused.join("・")}は使わない）` : "")
+    + (name === "期間限定版" ? `。ただし税抜のお米（商品A〜F）・書籍・米粉の合計が${freeShippingThresholdYen.toLocaleString("ja-JP")}円以上なら送料無料（米ぬかは合計に含まない）` : "");
   ruleNotes.appendChild(li);
 });
 
