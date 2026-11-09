@@ -1,0 +1,17 @@
+# プッシュとプルリクエストのたびに、GitHubの仮想環境(Ubuntu)でテストを自動実行する。
+name: test
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      # スマホ幅の確認に使う、画面のないChromiumを入れる
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
