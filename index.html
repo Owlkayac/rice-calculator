@@ -40,11 +40,7 @@ button { width: 100%; padding: 16px; font-size: 18px; margin-top: 15px; border: 
 <body>
 <div class="container">
 <h1>発送請求額計算</h1>
-<div class="tabs" role="tablist">
-<button type="button" class="tab active" id="tab-normal" role="tab" aria-selected="true" onclick="selectPackaging('normal')">普通計算</button>
-<button type="button" class="tab" id="tab-simple" role="tab" aria-selected="false" onclick="selectPackaging('simple')"><span class="nb">簡易包装</span><span class="nb">計算</span></button>
-<button type="button" class="tab" id="tab-limited" role="tab" aria-selected="false" onclick="selectPackaging('limited')"><span class="nb">期間限定</span><span class="nb">版</span></button>
-</div>
+<div class="tabs" id="tabs"></div>
 <p class="tab-note" id="packagingNote"></p>
 <div class="item">
 <label for="destPrefecture">配送先都道府県</label>
@@ -118,149 +114,73 @@ button { width: 100%; padding: 16px; font-size: 18px; margin-top: 15px; border: 
 </div>
 <p class="link"><a href="shipping-fees.html">送り先別の送料一覧を見る</a></p>
 </div>
-<!-- ?v=3 は版の印。shipping-fees.js を変えたら数字を上げ、スマホが古いファイルを使い回さないようにする -->
-<script src="shipping-fees.js?v=3"></script>
+<!-- ?v=5 は版の印。JSファイルを変えたら、index.html と shipping-fees.html の?v=をすべて同じ数字に上げ、スマホが古いファイルを使い回さないようにする -->
+<script src="shipping-fees.js?v=5"></script>
+<script src="calc.js?v=5"></script>
 <script>
-// 価格表（税抜）。画面のラベルと計算の両方がここを使う。価格を変えるときはここだけ直す。
-// （税率の8%・10%は、ラベル・結果欄の文字と計算の108・110の両方に書いてある。税率を変えるときは両方直す）
-// どの商品も「1kgあたりの価格 × 重さ（kg）」で計算する（普通計算・簡易包装計算とも同じ）。
-const products = [
-  { id: "a", name: "商品A", unitPrice: 1850 },
-  { id: "b", name: "商品B", unitPrice: 1450 },
-  { id: "c", name: "商品C", unitPrice: 865 },
-  { id: "d", name: "商品D", unitPrice: 797 },
-  { id: "e", name: "商品E", unitPrice: 697 },
-  { id: "f", name: "商品F", unitPrice: 1450 }
-];
-const riceFlour = { price: 270, perGrams: 300 }; // 米粉：300gあたり270円
-const riceBran = { price: 100, perGrams: 100 };   // 米ぬか：100gあたり100円
-const bookPrice = 1600;                           // 書籍：1個1,600円
-const MAX_BOOK_COUNT = 999;                       // 書籍の個数の上限（打ち間違い防止）
+// このスクリプトは「画面の読み取りと表示」だけを担当する。
+// 価格・税率・計算は calc.js、送料と包装の種類は shipping-fees.js にある。
 
-const MAX_WEIGHT_KG = 24;
-
-// いま選んでいるタブ（"normal"＝普通計算、"simple"＝簡易包装計算、"limited"＝期間限定版）。
-let packaging = "normal";
-const packagingNames = { normal: "普通", simple: "簡易包装", limited: "期間限定" };
-
-// 合計重量から、送料表のどの列（1番〜4番）を使うかを返す。列の決め方は包装の種類（タブ）で違う。
-// 重量0（書籍のみの注文）は最小の重量帯で送る。
-function getWeightBand(weight) {
-  if (weight > MAX_WEIGHT_KG) {
-    throw new Error(`合計重量が${MAX_WEIGHT_KG}kgを超えています（${weight}kg）。2箱に分けて計算してください`);
-  }
-  const rule = packagingRules[packaging].find(candidate => weight <= candidate.maxKg);
-  if (!rule) throw new Error(`この重さの送料が設定されていません（${weight}kg）`);
-  return rule.column;
-}
-
-function calcShippingFee(destPrefecture, weight) {
-  if (destPrefecture === "") throw new Error("配送先都道府県を選んでください");
-  const group = prefectureGroups[destPrefecture];
-  if (!group) throw new Error(`送料が設定されていない都道府県です: ${destPrefecture}`);
-  const band = getWeightBand(weight);
-  const fee = shippingFees[group]?.[band];
-  if (typeof fee !== "number") throw new Error(`送料の設定が見つかりません: ${group} / ${band}`);
-  return { fee, band };
-}
+// いま選んでいるタブ（packagingModes のキー："normal"＝普通計算、"simple"＝簡易包装計算、"limited"＝期間限定版）。
+let currentModeId = "normal";
 
 function formatYen(amount) { return amount.toLocaleString("ja-JP") + "円"; }
 
-// 税込額の1円未満を切り捨てる。小数の計算誤差を避けるため、分子・分母とも整数で渡す。
-function floorDivide(numerator, denominator) { return Math.floor(numerator / denominator); }
+// ===== 入力の読み取り =====
 
-// 入力を「小数第decimals位まで」の数値として読み、10^decimals倍した整数で返す（例: 1.25kg → 125）。
-// 空欄は0。マイナス・数値以外・桁数オーバーはエラーにする。
+// 入力欄から数を読む（読み方の決まりは calc.js の parseAmount）。
 function readAmount(id, label, decimals) {
   const input = document.getElementById(id);
   // 「1.2.3」など読めない入力は、ブラウザが空欄として渡すため先に調べる。
   if (input.validity.badInput) throw new Error(`${label}は数値で入力してください`);
-  const raw = input.value.trim();
-  if (raw === "") return 0;
-  const match = raw.match(/^\d+(?:\.(\d+))?$/);
-  if (raw.startsWith("-")) throw new Error(`${label}は0以上で入力してください`);
-  const example = decimals === 0 ? "12" : "1.25";
-  if (!match) throw new Error(`${label}は「${example}」のように半角数字で入力してください（「.5」「1e3」のような書き方は使えません）`);
-  const fraction = match[1] ?? "";
-  if (fraction.length > decimals) {
-    throw new Error(decimals === 0 ? `${label}は整数で入力してください` : `${label}は小数第${decimals}位までで入力してください`);
-  }
-  return Math.round(Number(raw) * 10 ** decimals);
+  return parseAmount(input.value, label, decimals);
 }
 
-// 税込額（1円未満切り捨て）。重量は0.01kg単位の整数、単価は円/kg。
-function productTaxIncluded(weightCentiKg, unitPrice) {
-  // 税抜額を「0.01円単位」の整数にそろえてから8%を加える。
-  // 割る数の 100 * 100 は、「0.01円単位を円に戻す100」と「108%の%を外す100」。
-  const netCentiYen = unitPrice * weightCentiKg;
-  return floorDivide(netCentiYen * 108, 100 * 100);
+// 画面の入力欄から、calcInvoice に渡す注文を作る。
+// 商品A〜Fの重量は0.01kg単位、米粉・米ぬかはg単位、書籍は個数（いずれも整数）。
+function readOrder() {
+  return {
+    prefecture: document.getElementById("destPrefecture").value,
+    productCentiKg: products.map(product => readAmount(product.id, `${product.name}の重量`, 2)),
+    riceFlourGrams: readAmount("riceFlourWeight", "米粉の重量", 0),
+    riceBranGrams: readAmount("riceBranWeight", "米ぬかの重量", 0),
+    bookCount: readAmount("bookCount", "書籍の個数", 0)
+  };
 }
 
-function showResults(values) {
+// ===== 結果の表示 =====
+
+// 送料無料の判定に使った重さの表示文（無料の条件がない包装の種類では空）。
+function describeFreeShippingResult(freeShipping) {
+  if (!freeShipping) return "";
+  return `送料無料の判定：お米（商品A〜F）の合計重量 ${freeShipping.riceKg}kg（${freeShipping.requiredKg}kg以上で無料）`;
+}
+
+// invoice は calcInvoice の結果。引数なしなら、結果欄を空（0円）に戻す。
+function showResults(invoice) {
+  const mode = packagingModes[currentModeId];
   // 例：「（簡易包装・2番）」。どちらのタブで計算した送料かを結果だけで分かるようにする。
-  document.getElementById("shippingBand").textContent = values.band ? `（${packagingNames[packaging]}・${values.band}）` : "";
-  // 期間限定版：送料が無料になるかどうかの判定に使った税抜合計を表示する。
-  document.getElementById("freeShippingNote").textContent = values.freeShippingNote ?? "";
-  ["weight", "shipping"].forEach(id => { document.getElementById(id).value = values[id] ?? ""; });
-  ["productTotal", "riceFlourTotal", "riceBranTotal", "bookTotal", "shippingTotal", "total"].forEach(id => {
-    document.getElementById(id).textContent = formatYen(values[id] ?? 0);
+  document.getElementById("shippingBand").textContent = invoice ? `（${mode.shortName}・${invoice.shippingLabel}）` : "";
+  document.getElementById("freeShippingNote").textContent = invoice ? describeFreeShippingResult(invoice.freeShipping) : "";
+  document.getElementById("weight").value = invoice ? invoice.weightKg : "";
+  document.getElementById("shipping").value = invoice ? invoice.shippingYen : "";
+  const yen = {
+    productTotal: invoice?.productTotal, riceFlourTotal: invoice?.riceFlourTotal, riceBranTotal: invoice?.riceBranTotal,
+    bookTotal: invoice?.bookTotal, shippingTotal: invoice?.shippingYen, total: invoice?.total
+  };
+  Object.entries(yen).forEach(([id, amount]) => {
+    document.getElementById(id).textContent = formatYen(amount ?? 0);
   });
 }
 
 // 前回の結果を消す（エラー時・入力変更時に、古い請求額が残らないようにする）。
-function resetResults() { showResults({}); }
+function resetResults() { showResults(); }
+
+// ===== ボタンの動き =====
 
 function calculate() {
   try {
-    const destPrefecture = document.getElementById("destPrefecture").value;
-    // 商品A〜Fの重量は0.01kg単位、米粉・米ぬかはg単位、書籍は個数（いずれも整数）。
-    const weights = products.map(product => readAmount(product.id, `${product.name}の重量`, 2));
-    const productWeightSum = weights.reduce((sum, w) => sum + w, 0);
-    const riceFlourWeight = readAmount("riceFlourWeight", "米粉の重量", 0);
-    const riceBranWeight = readAmount("riceBranWeight", "米ぬかの重量", 0);
-    const bookCount = readAmount("bookCount", "書籍の個数", 0);
-    // 書籍は重さの上限（24kg）で止まらないため、個数に上限を設ける。
-    if (bookCount > MAX_BOOK_COUNT) throw new Error(`書籍の個数は${MAX_BOOK_COUNT}個までで入力してください`);
-
-    if (productWeightSum + riceFlourWeight + riceBranWeight + bookCount === 0) {
-      throw new Error("商品の数量を入力してください");
-    }
-
-    // 合計重量は商品A〜F＋米粉＋米ぬか。書籍は含めない。g単位で足してからkgにする。
-    const weight = (productWeightSum * 10 + riceFlourWeight + riceBranWeight) / 1000;
-    const shippingFee = calcShippingFee(destPrefecture, weight);
-    let shipping = shippingFee.fee;
-    let band = shippingFee.band;
-    let freeShippingNote = "";
-
-    // 商品ごとに税抜金額へ8%を加え、商品ごとに税込金額を切り捨てる。
-    const productTotal = products.reduce(
-      (sum, product, i) => sum + productTaxIncluded(weights[i], product.unitPrice), 0);
-    // 米粉は300gあたり270円（税抜）に8%を加え、1円未満を切り捨てる。
-    const riceFlourTotal = floorDivide(riceFlour.price * riceFlourWeight * 108, riceFlour.perGrams * 100);
-    // 米ぬかは100gあたり100円（税抜）に8%を加え、1円未満を切り捨てる。
-    const riceBranTotal = floorDivide(riceBran.price * riceBranWeight * 108, riceBran.perGrams * 100);
-    // 書籍は税抜合計（1,600円×個数）に10%を加え、1円未満を切り捨てる。
-    const bookTotal = floorDivide(bookPrice * bookCount * 110, 100);
-
-    // 期間限定版：税抜のお米（商品A〜F）・書籍・米粉の合計が10,000円以上なら送料無料。未満なら普通の送料。
-    // 米ぬかは判定の合計に含めない。端数が出ないよう「0.01円単位」の整数で比べる。
-    // （米粉の式は今の価格 270円/300g だと割り切れる。価格や単位を変えるときは割り切れるか確認する）
-    if (packaging === "limited") {
-      const netCentiYen = products.reduce((sum, product, i) => sum + product.unitPrice * weights[i], 0)
-        + riceFlour.price * riceFlourWeight * 100 / riceFlour.perGrams
-        + bookPrice * bookCount * 100;
-      const isFree = netCentiYen >= freeShippingThresholdYen * 100;
-      if (isFree) {
-        shipping = 0;
-        band = "送料無料";
-      }
-      freeShippingNote = `送料無料の判定：税抜のお米（商品A〜F）・書籍・米粉の合計 ${formatYen(Math.floor(netCentiYen / 100))}`
-        + `（${formatYen(freeShippingThresholdYen)}以上で無料）`;
-    }
-    const total = productTotal + riceFlourTotal + riceBranTotal + bookTotal + shipping;
-
-    showResults({ weight, shipping, band, freeShippingNote, productTotal, riceFlourTotal, riceBranTotal, bookTotal, shippingTotal: shipping, total });
+    showResults(calcInvoice(readOrder(), currentModeId));
   } catch (error) {
     resetResults();
     alert(error.message);
@@ -273,24 +193,45 @@ function clearAll() {
 }
 
 // タブを切り替える。入力はそのまま残し、送料の決め方が変わるので結果は消す。
-function selectPackaging(mode) {
-  if (mode === packaging) return;
-  packaging = mode;
+function selectPackaging(modeId) {
+  if (modeId === currentModeId) return;
+  currentModeId = modeId;
   showPackaging();
   resetResults();
 }
 
+// タブを packagingModes から作る（包装の種類を足したら、ここは直さなくてよい）。
+function createTabs() {
+  const tabs = document.getElementById("tabs");
+  Object.entries(packagingModes).forEach(([modeId, mode]) => {
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = "tab";
+    tab.id = `tab-${modeId}`;
+    tab.addEventListener("click", () => selectPackaging(modeId));
+    // 狭い画面で折り返す位置を決めるため、tabLines ごとに .nb で包む。
+    mode.tabLines.forEach(line => {
+      const span = document.createElement("span");
+      span.className = "nb";
+      span.textContent = line;
+      tab.appendChild(span);
+    });
+    tabs.appendChild(tab);
+  });
+}
+
 // いま選んでいるタブの見た目と、送料の対応表の説明文を表示する。
 function showPackaging() {
-  const mode = packaging;
-  ["normal", "simple", "limited"].forEach(m => {
-    const tab = document.getElementById(`tab-${m}`);
-    tab.classList.toggle("active", m === mode);
-    tab.setAttribute("aria-selected", m === mode);
+  Object.keys(packagingModes).forEach(modeId => {
+    const tab = document.getElementById(`tab-${modeId}`);
+    tab.classList.toggle("active", modeId === currentModeId);
+    tab.setAttribute("aria-pressed", modeId === currentModeId);
   });
   // 例：「送料：〜5kg→1番、5kg超〜14kg→2番、14kg超〜24kg→3番」
-  const freeShippingText = mode === "limited" ? `。税抜のお米（商品A〜F）・書籍・米粉の合計が${formatYen(freeShippingThresholdYen)}以上なら送料無料（米ぬかは合計に含まない）` : "";
-  document.getElementById("packagingNote").textContent = `送料：${describePackagingRule(packagingRules[mode])}${freeShippingText}`;
+  const mode = packagingModes[currentModeId];
+  const freeShippingText = describeFreeShipping(mode);
+  document.getElementById("packagingNote").textContent =
+    `送料：${describePackagingRule(mode.rules)}` + (freeShippingText ? `。${freeShippingText}` : "");
 }
 
 // 入力を変えたら、計算し直すまで古い結果を表示しない。
@@ -304,15 +245,17 @@ document.querySelectorAll("#destPrefecture, input:not([readonly])").forEach(el =
 // HTMLには商品名だけを書いてあり、ここで価格を付け足す。
 function showPriceLabels() {
   const setLabel = (id, text) => { document.querySelector(`label[for="${id}"]`).textContent = text; };
-  products.forEach(product => setLabel(product.id, `${product.name}　${formatYen(product.unitPrice)}/kg（税抜・消費税8%）`));
-  setLabel("riceFlourWeight", `米粉　${riceFlour.perGrams}gあたり${formatYen(riceFlour.price)}（税抜・消費税8%）`);
-  setLabel("riceBranWeight", `米ぬか　${riceBran.perGrams}gあたり${formatYen(riceBran.price)}（税抜・消費税8%）`);
-  setLabel("bookCount", `書籍　${formatYen(bookPrice)}（税抜・消費税10%）`);
+  const foodTax = `消費税${TAX_PERCENT.food}%`;
+  products.forEach(product => setLabel(product.id, `${product.name}　${formatYen(product.unitPrice)}/kg（税抜・${foodTax}）`));
+  setLabel("riceFlourWeight", `米粉　${riceFlour.perGrams}gあたり${formatYen(riceFlour.price)}（税抜・${foodTax}）`);
+  setLabel("riceBranWeight", `米ぬか　${riceBran.perGrams}gあたり${formatYen(riceBran.price)}（税抜・${foodTax}）`);
+  setLabel("bookCount", `書籍　${formatYen(book.price)}（税抜・消費税${TAX_PERCENT.book}%）`);
 }
 
+// 初期表示。この3つは順番を入れ替えても動く。
+createTabs();
 showPackaging();
 showPriceLabels();
-
 </script>
 </body>
 </html>
