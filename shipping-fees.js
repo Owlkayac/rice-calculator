@@ -13,7 +13,7 @@ const prefectureGroups = {
 };
 
 // 送料グループ × 列（1番〜4番）ごとの送料（税込・円）のテーブル。
-// どの重さでどの列を使うかは、下の packagingRules で包装の種類ごとに決める。
+// どの重さでどの列を使うかは、下の packagingModes で包装の種類ごとに決める。
 const shippingFees = {
   "埼玉県": { "1番": 605, "2番": 797, "3番": 1050, "4番": 1303 },
   "東北・関東・信越・北陸・東海": { "1番": 610, "2番": 854, "3番": 1092, "4番": 1353 },
@@ -23,29 +23,37 @@ const shippingFees = {
   "沖縄県": { "1番": 1056, "2番": 1342, "3番": 1622, "4番": 1908 }
 };
 
-// 包装の種類ごとに、合計重量から「上の送料表のどの列を使うか」を決めるルール。
-// 上から順に見て、合計重量が maxKg 以下になった最初の行の column（列の名前）の送料を使う。
-const packagingRules = {
-  // 普通計算：〜4.5kgは1番、4.5kg超〜10kgは2番、10kg超〜20kgは3番、20kg超〜24kgは4番の送料。
-  normal: [
-    { maxKg: 4.5, column: "1番" },
-    { maxKg: 10, column: "2番" },
-    { maxKg: 20, column: "3番" },
-    { maxKg: 24, column: "4番" }
-  ],
-  // 簡易包装計算：〜5kgは1番、5kg超〜14kgは2番、14kg超〜24kgは3番の送料（4番は使わない）。
-  simple: [
-    { maxKg: 5, column: "1番" },
-    { maxKg: 14, column: "2番" },
-    { maxKg: 24, column: "3番" }
-  ]
+// 包装の種類（タブ）の設定。新しい種類を足すときは、ここに1つ書き足すだけでよい。
+// （タブ・送料の説明・送料一覧・計算のすべてが、この設定から作られる）
+//   shortName          : 結果の横に出す短い名前（例：「（簡易包装・2番）」）
+//   tabLines           : タブの文字。狭い画面で折り返してよい位置ごとに分けて書く
+//   rules              : 合計重量から送料の列（1番〜4番）を決めるルール。
+//                        上から順に見て、合計重量が maxKg 以下になった最初の行の column の送料を使う
+//   freeShippingRiceKg : （省略可）お米（商品A〜F）の合計重量がこの重さ以上なら送料無料
+const NORMAL_RULES = [
+  // 〜4.5kgは1番、4.5kg超〜10kgは2番、10kg超〜20kgは3番、20kg超〜24kgは4番の送料。
+  { maxKg: 4.5, column: "1番" },
+  { maxKg: 10, column: "2番" },
+  { maxKg: 20, column: "3番" },
+  { maxKg: 24, column: "4番" }
+];
+const packagingModes = {
+  normal: { shortName: "普通", tabLines: ["普通計算"], rules: NORMAL_RULES },
+  simple: {
+    shortName: "簡易包装", tabLines: ["簡易包装", "計算"],
+    // 〜5kgは1番、5kg超〜14kgは2番、14kg超〜24kgは3番の送料（4番は使わない）。
+    rules: [
+      { maxKg: 5, column: "1番" },
+      { maxKg: 14, column: "2番" },
+      { maxKg: 24, column: "3番" }
+    ]
+  },
+  // 期間限定版：送料の決め方は普通計算と同じ。お米が3kg以上なら送料無料。
+  limited: { shortName: "期間限定", tabLines: ["期間限定", "版"], rules: NORMAL_RULES, freeShippingRiceKg: 3 }
 };
-// 期間限定版：送料の決め方は普通計算と同じ（送料が無料になる条件は下の freeShippingThresholdKg）。
-packagingRules.limited = packagingRules.normal;
 
-// 期間限定版で送料が無料になる、お米（商品A〜F）の合計重量（kg）。この重さ以上で無料。
-// 米粉・米ぬか・書籍は重さの判定に含めない。
-const freeShippingThresholdKg = 3;
+// 包装の種類の正式な名前（例：「簡易包装計算」）。
+function packagingTitle(mode) { return mode.tabLines.join(""); }
 
 // 重さと列の対応を文章にする（例：「〜4.5kg→1番、4.5kg超〜10kg→2番、…」）。計算画面と一覧ページで使う。
 function describePackagingRule(rules) {
@@ -55,4 +63,10 @@ function describePackagingRule(rules) {
     previousMaxKg = rule.maxKg;
     return `${range}→${rule.column}`;
   }).join("、");
+}
+
+// 送料無料の条件を文章にする。無料の条件がない包装の種類では空文字を返す。
+function describeFreeShipping(mode) {
+  if (mode.freeShippingRiceKg === undefined) return "";
+  return `お米（商品A〜F）の合計重量が${mode.freeShippingRiceKg}kg以上なら送料無料（米粉・米ぬか・書籍は含まない）`;
 }

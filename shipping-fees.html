@@ -32,7 +32,7 @@ td { text-align: right; white-space: nowrap; }
 </table>
 <p class="link"><a href="index.html">請求額の計算に戻る</a></p>
 </div>
-<script src="shipping-fees.js?v=4"></script>
+<script src="shipping-fees.js?v=5"></script>
 <script>
 // 表の中身は shipping-fees.js（計算と同じ送料テーブル）から作る。
 const groups = Object.keys(shippingFees);
@@ -46,14 +46,15 @@ bands.forEach(band => {
   header.appendChild(th);
 });
 
-// 表の下：普通計算・簡易包装計算・期間限定版それぞれの、重さと番号の対応（計算と同じルールから作る）。
+// 表の下：包装の種類ごとの、重さと番号の対応（計算と同じ packagingModes から作る）。
 const ruleNotes = document.getElementById("ruleNotes");
-[["普通計算", packagingRules.normal], ["簡易包装計算", packagingRules.simple], ["期間限定版", packagingRules.limited]].forEach(([name, rules]) => {
+Object.values(packagingModes).forEach(mode => {
   const li = document.createElement("li");
   // 使わない番号があれば書き添える（例：簡易包装は4番を使わない）。
-  const unused = bands.filter(band => !rules.some(rule => rule.column === band));
-  li.textContent = `${name}：${describePackagingRule(rules)}` + (unused.length ? `（${unused.join("・")}は使わない）` : "")
-    + (name === "期間限定版" ? `。ただしお米（商品A〜F）の合計重量が${freeShippingThresholdKg}kg以上なら送料無料（米粉・米ぬか・書籍は含まない）` : "");
+  const unused = bands.filter(band => !mode.rules.some(rule => rule.column === band));
+  const freeShippingText = describeFreeShipping(mode);
+  li.textContent = `${packagingTitle(mode)}：${describePackagingRule(mode.rules)}` + (unused.length ? `（${unused.join("・")}は使わない）` : "")
+    + (freeShippingText ? `。ただし${freeShippingText}` : "");
   ruleNotes.appendChild(li);
 });
 

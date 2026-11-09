@@ -157,4 +157,4 @@ function calcInvoice(prefecture, kg, packaging = "normal") {
 - 米粉（300gあたり270円・税8%）、米ぬか（100gあたり100円・税8%）、書籍（1,600円・税10%。重量に含めない）
 - 期間限定版タブ：お米（A〜F）の合計重量が3kg以上で送料無料（送料の帯は普通計算と同じ）
 
-元のコードは `index.html`（calculate関数）と `shipping-fees.js`。
+元のコードは `calc.js`（calcInvoice関数）・`shipping-fees.js`・`index.html`（画面）。このファイルは抜き出し時点のコピーなので、価格や送料を変えたときは上の3つが正。
