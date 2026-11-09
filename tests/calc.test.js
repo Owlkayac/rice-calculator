@@ -22,7 +22,7 @@ test("商品Aを1.75kg：税込額と送料の合計", () => {
   // 1850円/kg × 1.75kg = 3237.5円 → 8%加算 3496.5円 → 切り捨てて3496円
   const r = calcInvoice(order({ productCentiKg: [175, 0, 0, 0, 0, 0] }), "normal");
   assert.equal(r.productTotal, 3496);
-  assert.equal(r.band, "1番");
+  assert.equal(r.shippingLabel, "1番");
   assert.equal(r.shippingYen, shippingFees["東北・関東・信越・北陸・東海"]["1番"]);
   assert.equal(r.total, 3496 + 610);
 });
@@ -43,17 +43,17 @@ test("米粉・米ぬか・書籍の税込額（米粉と米ぬかは8%、書籍
 test("書籍は合計重量に入らない", () => {
   const r = calcInvoice(order({ bookCount: 5 }), "normal");
   assert.equal(r.weightKg, 0);
-  assert.equal(r.band, "1番");
+  assert.equal(r.shippingLabel, "1番");
 });
 
 test("重量帯：普通計算は4.5kgまで1番、4.5kg超で2番", () => {
-  const at = centiKg => calcInvoice(order({ productCentiKg: [centiKg, 0, 0, 0, 0, 0] }), "normal").band;
+  const at = centiKg => calcInvoice(order({ productCentiKg: [centiKg, 0, 0, 0, 0, 0] }), "normal").shippingLabel;
   assert.equal(at(450), "1番");
   assert.equal(at(451), "2番");
 });
 
 test("重量帯：簡易包装計算は5kgまで1番", () => {
-  const at = centiKg => calcInvoice(order({ productCentiKg: [centiKg, 0, 0, 0, 0, 0] }), "simple").band;
+  const at = centiKg => calcInvoice(order({ productCentiKg: [centiKg, 0, 0, 0, 0, 0] }), "simple").shippingLabel;
   assert.equal(at(500), "1番");
   assert.equal(at(501), "2番");
 });
@@ -64,7 +64,7 @@ test("期間限定版：お米3kg以上で送料無料。税込額は変わら�
   assert.notEqual(under.shippingYen, 0);
   assert.equal(under.freeShipping.isFree, false);
   assert.equal(exact.shippingYen, 0);
-  assert.equal(exact.band, "送料無料");
+  assert.equal(exact.shippingLabel, "送料無料");
   assert.equal(exact.total, exact.productTotal);
 });
 

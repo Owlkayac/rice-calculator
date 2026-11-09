@@ -40,7 +40,7 @@ button { width: 100%; padding: 16px; font-size: 18px; margin-top: 15px; border: 
 <body>
 <div class="container">
 <h1>発送請求額計算</h1>
-<div class="tabs" id="tabs" role="tablist"></div>
+<div class="tabs" id="tabs"></div>
 <p class="tab-note" id="packagingNote"></p>
 <div class="item">
 <label for="destPrefecture">配送先都道府県</label>
@@ -114,7 +114,7 @@ button { width: 100%; padding: 16px; font-size: 18px; margin-top: 15px; border: 
 </div>
 <p class="link"><a href="shipping-fees.html">送り先別の送料一覧を見る</a></p>
 </div>
-<!-- ?v=5 は版の印。読み込むJSファイルを変えたら数字を上げ、スマホが古いファイルを使い回さないようにする -->
+<!-- ?v=5 は版の印。JSファイルを変えたら、index.html と shipping-fees.html の?v=をすべて同じ数字に上げ、スマホが古いファイルを使い回さないようにする -->
 <script src="shipping-fees.js?v=5"></script>
 <script src="calc.js?v=5"></script>
 <script>
@@ -160,7 +160,7 @@ function describeFreeShippingResult(freeShipping) {
 function showResults(invoice) {
   const mode = packagingModes[currentModeId];
   // 例：「（簡易包装・2番）」。どちらのタブで計算した送料かを結果だけで分かるようにする。
-  document.getElementById("shippingBand").textContent = invoice ? `（${mode.shortName}・${invoice.band}）` : "";
+  document.getElementById("shippingBand").textContent = invoice ? `（${mode.shortName}・${invoice.shippingLabel}）` : "";
   document.getElementById("freeShippingNote").textContent = invoice ? describeFreeShippingResult(invoice.freeShipping) : "";
   document.getElementById("weight").value = invoice ? invoice.weightKg : "";
   document.getElementById("shipping").value = invoice ? invoice.shippingYen : "";
@@ -208,7 +208,6 @@ function createTabs() {
     tab.type = "button";
     tab.className = "tab";
     tab.id = `tab-${modeId}`;
-    tab.setAttribute("role", "tab");
     tab.addEventListener("click", () => selectPackaging(modeId));
     // 狭い画面で折り返す位置を決めるため、tabLines ごとに .nb で包む。
     mode.tabLines.forEach(line => {
@@ -226,7 +225,7 @@ function showPackaging() {
   Object.keys(packagingModes).forEach(modeId => {
     const tab = document.getElementById(`tab-${modeId}`);
     tab.classList.toggle("active", modeId === currentModeId);
-    tab.setAttribute("aria-selected", modeId === currentModeId);
+    tab.setAttribute("aria-pressed", modeId === currentModeId);
   });
   // 例：「送料：〜5kg→1番、5kg超〜14kg→2番、14kg超〜24kg→3番」
   const mode = packagingModes[currentModeId];
@@ -253,6 +252,7 @@ function showPriceLabels() {
   setLabel("bookCount", `書籍　${formatYen(book.price)}（税抜・消費税${TAX_PERCENT.book}%）`);
 }
 
+// 初期表示。この3つは順番を入れ替えても動く。
 createTabs();
 showPackaging();
 showPriceLabels();

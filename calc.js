@@ -28,12 +28,14 @@ const MAX_BOOK_COUNT = 999;   // 書籍の個数の上限（書籍は重さの�
 // 税込額（1円未満は切り捨て）。小数の計算誤差が出ないよう、すべて整数のまま計算する。
 //   税込額 = 単価 × 数量 × (100 + 税率) ÷ (単位 × 100)
 //   price: 単価（円） / quantity: 数量（整数） / perUnit: 単価が何単位あたりか（数量と同じ単位）
+//   perUnit の例：米粉は300g、米ぬかは100g、書籍は1個、商品A〜Fは100（0.01kg単位の100個で1kg）
 function taxIncludedYen({ price, quantity, perUnit, taxPercent }) {
   return Math.floor(price * quantity * (100 + taxPercent) / (perUnit * 100));
 }
 
 // 商品A〜F1つ分の税込額。重さは0.01kg単位の整数（1.25kg → 125）、単価は円/kg。
 // 「perUnit: 100」は、0.01kg単位の重さ(100で1kg)を kg あたりの単価に合わせるための数。
+// 例：商品A 1.25kg → 1850 × 125 × 108 ÷ (100 × 100) ＝ 2497.5 → 切り捨てて2497円
 function productTaxIncluded(centiKg, unitPrice) {
   return taxIncludedYen({ price: unitPrice, quantity: centiKg, perUnit: 100, taxPercent: TAX_PERCENT.food });
 }
@@ -58,9 +60,9 @@ function parseAmount(rawText, label, decimals) {
 
 // ===== 送料の計算 =====
 
-// 合計重量（kg）から、送料表のどの列（1番〜4番）を使うかを返す。
-// 重量0（書籍のみの注文）は最小の重量帯で送る。
-function getWeightBand(weightKg, mode) {
+// 合計重量（kg）から、送料表のどの列（"1番"〜"4番"）を使うかを返す。
+// 重量0（書籍のみの注文）は最小の重量（1番）で送る。
+function getShippingColumn(weightKg, mode) {
   if (weightKg > MAX_WEIGHT_KG) {
     throw new Error(`合計重量が${MAX_WEIGHT_KG}kgを超えています（${weightKg}kg）。2箱に分けて計算してください`);
   }
@@ -69,22 +71,22 @@ function getWeightBand(weightKg, mode) {
   return rule.column;
 }
 
-// 送り先と重さから、送料（税込・円）と使った列を返す。
+// 送り先と重さから、送料表の送料（税込・円）と使った列（"1番"〜"4番"）を返す。送料無料の判定はここではしない。
 function lookupShippingFee(prefecture, weightKg, mode) {
   if (prefecture === "") throw new Error("配送先都道府県を選んでください");
   const group = prefectureGroups[prefecture];
   if (!group) throw new Error(`送料が設定されていない都道府県です: ${prefecture}`);
-  const band = getWeightBand(weightKg, mode);
-  const fee = shippingFees[group]?.[band];
-  if (typeof fee !== "number") throw new Error(`送料の設定が見つかりません: ${group} / ${band}`);
-  return { fee, band };
+  const column = getShippingColumn(weightKg, mode);
+  const fee = shippingFees[group]?.[column];
+  if (typeof fee !== "number") throw new Error(`送料の設定が見つかりません: ${group} / ${column}`);
+  return { fee, column };
 }
 
 // ===== 請求額の計算（これが入り口） =====
 
 // order（注文）と modeId（包装の種類。packagingModes のキー）から、請求額をすべて計算する。
 //   order.prefecture    : 配送先の都道府県（未選択は ""）
-//   order.productCentiKg: 商品A〜Fの重さ。products と同じ順の配列。0.01kg単位の整数
+//   order.productCentiKg: 商品A〜Fの重さ。products と同じ順の配列。0.01kg単位の整数（1.25kg → 125。centi＝100分の1）
 //   order.riceFlourGrams: 米粉の重さ（g、整数）
 //   order.riceBranGrams : 米ぬかの重さ（g、整数）
 //   order.bookCount     : 書籍の個数（整数）
@@ -99,8 +101,10 @@ function calcInvoice(order, modeId) {
   }
 
   // 合計重量（kg）は商品A〜F＋米粉＋米ぬか。書籍は含めない。g単位で足してからkgにする。
+  // （商品A〜Fの重さは0.01kg単位なので、×10でgにそろえる。0.01kg ＝ 10g）
   const weightKg = (productCentiKgSum * 10 + order.riceFlourGrams + order.riceBranGrams) / 1000;
-  const shippingFee = lookupShippingFee(order.prefecture, weightKg, mode);
+  // 送料無料でも、送り先の選択と24kgの上限は必要（無料でも箱は1つしか送れないため）。
+  const shippingLookup = lookupShippingFee(order.prefecture, weightKg, mode);
 
   // 送料無料の判定：お米（商品A〜F）だけの重さで見る。米粉・米ぬか・書籍は含めない。
   // 重さは0.01kg単位の整数のまま比べる（小数の誤差を避ける）。
@@ -113,8 +117,9 @@ function calcInvoice(order, modeId) {
     };
   }
   const isFree = freeShipping?.isFree === true;
-  const shippingYen = isFree ? 0 : shippingFee.fee;
-  const band = isFree ? "送料無料" : shippingFee.band;
+  const shippingYen = isFree ? 0 : shippingLookup.fee;
+  // 結果の横に出す送料の表示（"1番"〜"4番"、または無料なら"送料無料"）。
+  const shippingLabel = isFree ? "送料無料" : shippingLookup.column;
 
   // 商品ごとに税込金額を切り捨ててから足す。
   const productTotal = order.productCentiKg.reduce(
@@ -127,7 +132,7 @@ function calcInvoice(order, modeId) {
     price: book.price, quantity: order.bookCount, perUnit: 1, taxPercent: TAX_PERCENT.book });
 
   return {
-    weightKg, shippingYen, band, freeShipping,
+    weightKg, shippingYen, shippingLabel, freeShipping,
     productTotal, riceFlourTotal, riceBranTotal, bookTotal,
     total: productTotal + riceFlourTotal + riceBranTotal + bookTotal + shippingYen
   };
