@@ -70,3 +70,6 @@ function describeFreeShipping(mode) {
   if (mode.freeShippingRiceKg === undefined) return "";
   return `お米（商品A〜F）の合計重量が${mode.freeShippingRiceKg}kg以上なら送料無料（米粉・米ぬか・書籍は含まない）`;
 }
+
+// 金額を「3,496円」の形にする（整数用）。toLocaleString は初回に時間がかかるため、起動を速くするために使わない。
+function formatYen(amount) { return String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "円"; }

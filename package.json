@@ -3,8 +3,8 @@
   "private": true,
   "description": "発送請求額計算アプリ",
   "scripts": {
-    "test": "node --test tests/calc.test.js tests/e2e.test.js",
-    "test:unit": "node --test tests/calc.test.js",
+    "test": "node --test tests/calc.test.js tests/pages.test.js tests/e2e.test.js",
+    "test:unit": "node --test tests/calc.test.js tests/pages.test.js",
     "test:e2e": "node --test tests/e2e.test.js"
   },
   "devDependencies": {

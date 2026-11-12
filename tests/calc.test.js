@@ -10,8 +10,15 @@ const context = vm.createContext({});
 for (const file of ["shipping-fees.js", "calc.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "..", file), "utf8"), context, { filename: file });
 }
-const { calcInvoice, parseAmount, packagingModes, shippingFees, prefectureGroups, products } =
-  vm.runInContext("({ calcInvoice, parseAmount, packagingModes, shippingFees, prefectureGroups, products })", context);
+const {
+  calcInvoice, parseAmount, taxIncludedYen, getShippingColumn, lookupShippingFee, formatYen,
+  describePackagingRule, describeFreeShipping, packagingTitle,
+  packagingModes, shippingFees, prefectureGroups, products
+} = vm.runInContext(`({
+  calcInvoice, parseAmount, taxIncludedYen, getShippingColumn, lookupShippingFee, formatYen,
+  describePackagingRule, describeFreeShipping, packagingTitle,
+  packagingModes, shippingFees, prefectureGroups, products
+})`, context);
 
 // 注文を作る補助。商品A〜Fは [A, B, ...] の重さ(0.01kg単位)で渡す。
 const order = (overrides = {}) => ({
@@ -121,4 +128,70 @@ test("拡張性：包装の種類を設定に1つ足すだけで、計算に使�
   } finally {
     delete packagingModes.testMode;
   }
+});
+
+// ===== 部品ごとのテスト =====
+
+test("formatYen：3桁区切りと「円」。Intl（toLocaleString）と同じ結果で、より軽い", () => {
+  for (const n of [0, 7, 999, 1000, 3496, 12345, 1234567]) {
+    assert.equal(formatYen(n), n.toLocaleString("ja-JP") + "円");
+  }
+});
+
+test("taxIncludedYen：税込額は1円未満を切り捨てる（8%と10%）", () => {
+  assert.equal(taxIncludedYen({ price: 270, quantity: 300, perUnit: 300, taxPercent: 8 }), 291);
+  assert.equal(taxIncludedYen({ price: 1600, quantity: 1, perUnit: 1, taxPercent: 10 }), 1760);
+  assert.equal(taxIncludedYen({ price: 865, quantity: 1, perUnit: 100, taxPercent: 8 }), 9); // 9.342円
+  assert.equal(taxIncludedYen({ price: 100, quantity: 0, perUnit: 1, taxPercent: 8 }), 0);
+});
+
+test("getShippingColumn：境界の重さ（普通計算）", () => {
+  const normal = packagingModes.normal;
+  assert.equal(getShippingColumn(0, normal), "1番");
+  assert.equal(getShippingColumn(4.5, normal), "1番");
+  assert.equal(getShippingColumn(4.51, normal), "2番");
+  assert.equal(getShippingColumn(10, normal), "2番");
+  assert.equal(getShippingColumn(20, normal), "3番");
+  assert.equal(getShippingColumn(24, normal), "4番");
+  assert.throws(() => getShippingColumn(24.01, normal), /24kgを超えています/);
+});
+
+test("getShippingColumn：簡易包装は4番を使わない", () => {
+  assert.equal(getShippingColumn(14, packagingModes.simple), "2番");
+  assert.equal(getShippingColumn(24, packagingModes.simple), "3番");
+});
+
+test("lookupShippingFee：グループの送料表と同じ金額を返す。沖縄は専用の行", () => {
+  // vm（別の実行環境）で作られたオブジェクトなので、文字にして比べる
+  const plain = value => JSON.parse(JSON.stringify(value));
+  assert.deepEqual(plain(lookupShippingFee("沖縄県", 1, packagingModes.normal)), { fee: 1056, column: "1番" });
+  assert.deepEqual(plain(lookupShippingFee("埼玉県", 5, packagingModes.normal)), { fee: 797, column: "2番" });
+  assert.throws(() => lookupShippingFee("", 1, packagingModes.normal), /都道府県を選んで/);
+  assert.throws(() => lookupShippingFee("火星", 1, packagingModes.normal), /設定されていない/);
+});
+
+test("全都道府県×全包装×全重量帯で、送料が計算できる", () => {
+  for (const prefecture of Object.keys(prefectureGroups)) {
+    for (const mode of Object.values(packagingModes)) {
+      for (const rule of mode.rules) {
+        const { fee } = lookupShippingFee(prefecture, rule.maxKg, mode);
+        assert.ok(fee > 0, `${prefecture} ${rule.maxKg}kg`);
+      }
+    }
+  }
+});
+
+test("説明文：重さと列の対応、送料無料の条件、包装の正式名", () => {
+  assert.equal(describePackagingRule(packagingModes.simple.rules), "〜5kg→1番、5kg超〜14kg→2番、14kg超〜24kg→3番");
+  assert.match(describeFreeShipping(packagingModes.limited), /3kg以上なら送料無料/);
+  assert.equal(describeFreeShipping(packagingModes.normal), "");
+  assert.equal(packagingTitle(packagingModes.simple), "簡易包装計算");
+});
+
+test("商品A〜Fの合計：6品それぞれの単価で計算される", () => {
+  // 各商品を1kgずつ → 税込額を商品ごとに切り捨てて足す
+  const r = calcInvoice(order({ productCentiKg: [100, 100, 100, 100, 100, 100] }), "normal");
+  const expected = products.reduce((sum, p) => sum + Math.floor(p.unitPrice * 1.08), 0);
+  assert.equal(r.productTotal, expected);
+  assert.equal(r.weightKg, 6);
 });
