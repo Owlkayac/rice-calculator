@@ -258,3 +258,31 @@ test("送料一覧ページ：全グループの表と、3つの包装の説明�
     assert.deepEqual(problems, []);
   } finally { await context.close(); }
 });
+
+test("入力欄はデータから作られる：都道府県47件、入力欄9つ（単位と刻み付き）、エラーなし", async () => {
+  const { page, context, problems } = await openPage(INDEX_URL);
+  try {
+    assert.equal(await page.$$eval("#destPrefecture option", list => list.length), 48); // 先頭の「選択してください」＋47
+    const fields = await page.$$eval("#inputFields .item", items => items.map(item => ({
+      id: item.querySelector("input").id, step: item.querySelector("input").step, text: item.textContent
+    })));
+    assert.deepEqual(fields.map(f => f.id), ["a", "b", "c", "d", "e", "f", "riceFlourWeight", "riceBranWeight", "bookCount"]);
+    assert.deepEqual(fields.map(f => f.step), ["0.01", "0.01", "0.01", "0.01", "0.01", "0.01", "1", "1", "1"]);
+    assert.match(fields[0].text, /商品A　1,850円\/kg（税抜・消費税8%）\s*kg$/);
+    assert.match(fields[8].text, /書籍　1,600円（税抜・消費税10%）\s*個$/);
+    assert.deepEqual(problems, []);
+  } finally { await context.close(); }
+});
+
+test("計算したあと入力を変えると、古い結果が消える（あとから作った入力欄でも動く）", async () => {
+  const { page, context } = await openPage(INDEX_URL);
+  try {
+    await fillAndCalculate(page, { rice: { a: 1 } });
+    assert.notEqual(await text(page, "#total"), "0円");
+    await page.fill("#a", "2");
+    assert.equal(await text(page, "#total"), "0円");
+    await fillAndCalculate(page, { rice: { a: 1 } });
+    await page.selectOption("#destPrefecture", "沖縄県");
+    assert.equal(await text(page, "#total"), "0円");
+  } finally { await context.close(); }
+});
